@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cerumbra - End-to-End Encrypted GPU Conversations</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <h1>🔐 Cerumbra</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#about">About</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#security">Security</a></li>
+                <li><a href="#attestation">Attestation</a></li>
+                <li><a href="#demo">Demo</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="hero">
+            <div class="hero-content">
+                <h1>End-to-End Encrypted Conversations with GPUs</h1>
+                <p class="tagline">Cerumbra enables private, secure AI inference using browser-to-TEE encryption</p>
+                <a href="#demo" class="cta-button">Try the Demo</a>
+            </div>
+        </section>
+
+        <section id="about">
+            <div class="container">
+                <h2>What is Cerumbra?</h2>
+                <p>Cerumbra is a revolutionary protocol for end-to-end encrypted conversations with GPU-accelerated AI models running in Trusted Execution Environments (TEEs). It ensures that your prompts and the model's responses remain private and secure throughout the entire inference process.</p>
+                
+                <div class="features">
+                    <div class="feature">
+                        <div class="feature-icon">🔒</div>
+                        <h3>End-to-End Encryption</h3>
+                        <p>Your data is encrypted from browser to GPU TEE, ensuring complete privacy</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">✓</div>
+                        <h3>Remote Attestation</h3>
+                        <p>Cryptographically verify that your inference runs in a genuine TEE</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">⚡</div>
+                        <h3>GPU Acceleration</h3>
+                        <p>Leverage NVIDIA Blackwell TEE for high-performance encrypted inference</p>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">🌐</div>
+                        <h3>Decentralized Network</h3>
+                        <p>Foundation for the decentralized Cerumbra Network</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture">
+            <div class="container">
+                <h2>Architecture</h2>
+                <p>Cerumbra implements a secure communication protocol between browsers and GPU TEEs:</p>
+                
+                <div class="architecture-diagram">
+                    <div class="arch-step">
+                        <div class="arch-number">1</div>
+                        <h3>Browser Client</h3>
+                        <p>Web browser generates an ephemeral key pair using Web Crypto API</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <div class="arch-number">2</div>
+                        <h3>TEE Attestation</h3>
+                        <p>GPU TEE provides cryptographic proof of its authenticity and integrity</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <div class="arch-number">3</div>
+                        <h3>Key Exchange</h3>
+                        <p>ECDH key exchange establishes a shared secret between browser and TEE</p>
+                    </div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-step">
+                        <div class="arch-number">4</div>
+                        <h3>Encrypted Inference</h3>
+                        <p>Prompts are encrypted, processed in TEE, and responses streamed back securely</p>
+                    </div>
+                </div>
+
+                <div class="tech-stack">
+                    <h3>Technology Stack</h3>
+                    <ul>
+                        <li><strong>Browser Crypto:</strong> Web Crypto API for ECDH key generation and AES-GCM encryption</li>
+                        <li><strong>TEE:</strong> NVIDIA Blackwell Trusted Execution Environment</li>
+                        <li><strong>Attestation:</strong> Remote attestation protocol with certificate chain verification</li>
+                        <li><strong>Transport:</strong> WebSocket for low-latency streaming responses</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="security">
+            <div class="container">
+                <h2>Security Model</h2>
+                <p>Cerumbra's security guarantees are based on multiple layers of protection:</p>
+
+                <div class="security-points">
+                    <div class="security-item">
+                        <h3>🔐 Cryptographic Guarantees</h3>
+                        <ul>
+                            <li><strong>Forward Secrecy:</strong> Each session uses ephemeral keys that are never stored</li>
+                            <li><strong>Authenticated Encryption:</strong> AES-256-GCM provides both confidentiality and authenticity</li>
+                            <li><strong>Key Derivation:</strong> HKDF derives session keys from ECDH shared secret</li>
+                        </ul>
+                    </div>
+
+                    <div class="security-item">
+                        <h3>🛡️ TEE Protection</h3>
+                        <ul>
+                            <li><strong>Memory Encryption:</strong> All data in GPU memory is encrypted by hardware</li>
+                            <li><strong>Isolated Execution:</strong> Code runs in hardware-isolated environment</li>
+                            <li><strong>Attestation:</strong> Remote parties can verify TEE authenticity and integrity</li>
+                        </ul>
+                    </div>
+
+                    <div class="security-item">
+                        <h3>🔍 Threat Model</h3>
+                        <ul>
+                            <li><strong>Protected Against:</strong> Network eavesdropping, server operators, cloud providers</li>
+                            <li><strong>Assumptions:</strong> TEE hardware and attestation infrastructure are trustworthy</li>
+                            <li><strong>Out of Scope:</strong> Physical attacks, side-channel attacks on TEE</li>
+                        </ul>
+                    </div>
+
+                    <div class="security-item">
+                        <h3>⚠️ Security Considerations</h3>
+                        <ul>
+                            <li><strong>Certificate Validation:</strong> Always verify TEE attestation certificates against known roots</li>
+                            <li><strong>Nonce Freshness:</strong> Use cryptographically random nonces for each session</li>
+                            <li><strong>Key Rotation:</strong> Consider rotating session keys for long-running conversations</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="attestation">
+            <div class="container">
+                <h2>Attestation Flow</h2>
+                <p>Remote attestation is the cornerstone of Cerumbra's security, allowing browsers to verify they're communicating with a genuine TEE.</p>
+
+                <div class="attestation-flow">
+                    <div class="flow-step">
+                        <h3>Step 1: Attestation Request</h3>
+                        <p>Browser sends a challenge nonce to the TEE</p>
+                        <pre><code>{
+  "type": "attestation_request",
+  "nonce": "&lt;random_bytes&gt;"
+}</code></pre>
+                    </div>
+
+                    <div class="flow-step">
+                        <h3>Step 2: TEE Quote Generation</h3>
+                        <p>TEE generates a cryptographic quote including:</p>
+                        <ul>
+                            <li>Hardware measurements (PCRs)</li>
+                            <li>TEE public key</li>
+                            <li>Challenge nonce</li>
+                            <li>Signature from TEE hardware</li>
+                        </ul>
+                    </div>
+
+                    <div class="flow-step">
+                        <h3>Step 3: Certificate Chain</h3>
+                        <p>TEE provides certificate chain linking quote to hardware root of trust:</p>
+                        <ul>
+                            <li>TEE Signing Certificate</li>
+                            <li>Intermediate CA Certificates</li>
+                            <li>Hardware Root Certificate</li>
+                        </ul>
+                    </div>
+
+                    <div class="flow-step">
+                        <h3>Step 4: Verification</h3>
+                        <p>Browser verifies:</p>
+                        <ul>
+                            <li>Certificate chain is valid</li>
+                            <li>Quote signature is correct</li>
+                            <li>Nonce matches request</li>
+                            <li>Measurements match expected values</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="attestation-code">
+                    <h3>Example Attestation Verification</h3>
+                    <pre><code>async function verifyAttestation(quote, certChain, expectedNonce) {
+    // 1. Verify certificate chain
+    await verifyCertificateChain(certChain);
+    
+    // 2. Extract TEE public key from certificate
+    const teePublicKey = extractPublicKey(certChain[0]);
+    
+    // 3. Verify quote signature
+    const quoteValid = await crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        teePublicKey,
+        quote.signature,
+        quote.data
+    );
+    
+    // 4. Verify nonce freshness
+    if (quote.nonce !== expectedNonce) {
+        throw new Error("Nonce mismatch");
+    }
+    
+    // 5. Verify measurements
+    verifyMeasurements(quote.measurements);
+    
+    return teePublicKey;
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="demo">
+            <div class="container">
+                <h2>Interactive Demo</h2>
+                <p>Experience Cerumbra's end-to-end encryption in action. This demo simulates the complete flow from key exchange to encrypted inference.</p>
+
+                <div class="demo-container">
+                    <div class="demo-status">
+                        <h3>Connection Status</h3>
+                        <div id="status-indicator" class="status-disconnected">
+                            <span class="status-dot"></span>
+                            <span id="status-text">Not Connected</span>
+                        </div>
+                        <button id="connect-btn" class="demo-button">Connect to TEE</button>
+                    </div>
+
+                    <div class="demo-crypto-info">
+                        <h3>Cryptographic State</h3>
+                        <div class="crypto-details">
+                            <div class="crypto-field">
+                                <label>Browser Public Key:</label>
+                                <code id="browser-pubkey">Not generated</code>
+                            </div>
+                            <div class="crypto-field">
+                                <label>TEE Public Key:</label>
+                                <code id="tee-pubkey">Not received</code>
+                            </div>
+                            <div class="crypto-field">
+                                <label>Shared Secret:</label>
+                                <code id="shared-secret">Not established</code>
+                            </div>
+                            <div class="crypto-field">
+                                <label>Attestation Status:</label>
+                                <code id="attestation-status">Not verified</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="demo-chat">
+                        <h3>Encrypted Conversation</h3>
+                        <div id="chat-messages" class="chat-messages">
+                            <div class="system-message">Enter a prompt to start an encrypted inference...</div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" id="chat-input" placeholder="Enter your prompt..." disabled>
+                            <button id="send-btn" class="demo-button" disabled>Send Encrypted</button>
+                        </div>
+                    </div>
+
+                    <div class="demo-logs">
+                        <h3>Protocol Logs</h3>
+                        <div id="protocol-logs" class="logs-container">
+                            <div class="log-entry">Waiting for connection...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="implementation">
+            <div class="container">
+                <h2>Implementation Guide</h2>
+                <p>Get started with Cerumbra in your own applications:</p>
+
+                <div class="implementation-guide">
+                    <div class="guide-section">
+                        <h3>1. Browser-Side Setup</h3>
+                        <pre><code>// Generate ephemeral key pair
+const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey", "deriveBits"]
+);
+
+// Export public key for TEE
+const publicKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);</code></pre>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>2. Attestation Verification</h3>
+                        <pre><code>// Request attestation from TEE
+const attestation = await requestAttestation(nonce);
+
+// Verify TEE authenticity
+const teePublicKey = await verifyAttestation(
+    attestation.quote,
+    attestation.certChain,
+    nonce
+);</code></pre>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>3. Key Exchange</h3>
+                        <pre><code>// Perform ECDH key exchange
+const sharedSecret = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: teePublicKey },
+    keyPair.privateKey,
+    256
+);
+
+// Derive encryption key
+const encryptionKey = await crypto.subtle.importKey(
+    "raw",
+    await hkdf(sharedSecret, "cerumbra-v1"),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+);</code></pre>
+                    </div>
+
+                    <div class="guide-section">
+                        <h3>4. Encrypted Inference</h3>
+                        <pre><code>// Encrypt prompt
+const iv = crypto.getRandomValues(new Uint8Array(12));
+const encryptedPrompt = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    encryptionKey,
+    encoder.encode(prompt)
+);
+
+// Send to TEE
+await sendEncrypted({ iv, data: encryptedPrompt });</code></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="network">
+            <div class="container">
+                <h2>Cerumbra Network</h2>
+                <p>Cerumbra is designed as the foundation for a decentralized network of encrypted AI inference providers:</p>
+
+                <div class="network-features">
+                    <div class="network-feature">
+                        <h3>🌐 Decentralized</h3>
+                        <p>Anyone can run a Cerumbra node with compatible TEE hardware</p>
+                    </div>
+                    <div class="network-feature">
+                        <h3>🔍 Verifiable</h3>
+                        <p>All nodes provide cryptographic proof of their TEE configuration</p>
+                    </div>
+                    <div class="network-feature">
+                        <h3>💰 Incentivized</h3>
+                        <p>Node operators are compensated for providing private inference</p>
+                    </div>
+                    <div class="network-feature">
+                        <h3>🔒 Private by Default</h3>
+                        <p>End-to-end encryption ensures privacy across the entire network</p>
+                    </div>
+                </div>
+
+                <div class="roadmap">
+                    <h3>Roadmap</h3>
+                    <ul>
+                        <li><strong>Phase 1 (Current):</strong> Protocol specification and demo implementation</li>
+                        <li><strong>Phase 2:</strong> Production TEE integration with NVIDIA Blackwell</li>
+                        <li><strong>Phase 3:</strong> Network protocol and node discovery</li>
+                        <li><strong>Phase 4:</strong> Tokenomics and incentive mechanism</li>
+                        <li><strong>Phase 5:</strong> Multi-model support and governance</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Cerumbra. Licensed under Apache 2.0.</p>
+            <p>Building the future of private AI inference.</p>
+        </div>
+    </footer>
+
+    <script src="demo.js"></script>
+</body>
+</html>
