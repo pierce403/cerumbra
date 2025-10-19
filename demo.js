@@ -1,5 +1,5 @@
 // Cerumbra Demo - Browser-side Cryptographic Implementation
-// This demonstrates end-to-end encryption with simulated TEE
+// Simulates the DGX Spark attestation + key provisioning flow captured in the design brief
 
 class CerumbraClient {
     constructor() {
@@ -205,7 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    addLog("Cerumbra demo ready. Click 'Connect to TEE' to begin.", "info");
+    addLog("Cerumbra DGX Spark demo ready. Click 'Connect to TEE' to begin.", "info");
+    addLog("Note: This demo targets the DGX Spark Blackwell confidential computing stack only.", "info");
 });
 
 // Handle connection to simulated TEE
@@ -223,7 +224,7 @@ async function handleConnect() {
         client = new CerumbraClient();
 
         // Generate browser key pair
-        addLog("Generating ECDH key pair...", "info");
+        addLog("Generating browser ECDH key pair for DGX Spark session...", "info");
         await client.generateKeyPair();
         const publicKeyJwk = await client.exportPublicKey();
         updateCryptoField('browser-pubkey', JSON.stringify(publicKeyJwk).substring(0, 60) + '...');
@@ -232,6 +233,7 @@ async function handleConnect() {
         // Generate attestation nonce
         const nonce = client.generateNonce();
         addLog("Generated attestation nonce: " + arrayToHex(nonce).substring(0, 16) + "...", "info");
+        addLog("Calling DGX Spark `/attest` endpoint with nonce challenge (simulated GET /attest?nonce=…)", "info");
 
         // For demo purposes, simulate TEE connection
         // In production, this would connect to actual TEE server
@@ -242,8 +244,8 @@ async function handleConnect() {
         sendBtn.disabled = false;
         chatInput.disabled = false;
         connectBtn.textContent = "Connected";
-        addLog("✓ Secure channel established", "success");
-        addLog("Ready for encrypted inference!", "success");
+        addLog("✓ Secure channel established with DGX Spark Blackwell TEE", "success");
+        addLog("Ready for encrypted inference on DGX Spark!", "success");
 
     } catch (error) {
         addLog("Connection failed: " + error.message, "error");
@@ -253,9 +255,9 @@ async function handleConnect() {
     }
 }
 
-// Simulate TEE connection and key exchange
+// Simulate DGX Spark attestation flow and key exchange
 async function simulateTEEConnection(client, browserPublicKey, nonce) {
-    addLog("Requesting attestation from TEE...", "info");
+    addLog("DGX Spark node returning NRAS-signed attestation bundle + ephemeral GPU ECDH key bound to your nonce...", "info");
     
     // Simulate TEE generating its own key pair
     const teeKeyPair = await crypto.subtle.generateKey(
@@ -281,21 +283,21 @@ async function simulateTEEConnection(client, browserPublicKey, nonce) {
         teePublicKey: teePublicKeyJwk
     };
     
-    addLog("Received attestation from TEE", "info");
-    addLog("Verifying attestation...", "info");
+    addLog("Received DGX Spark attestation material", "info");
+    addLog("Verifying NRAS attestation (simulated coordinator check)...", "info");
     
     // Verify attestation
     await client.verifyAttestation(attestation);
     updateCryptoField('attestation-status', '✓ Verified');
-    addLog("✓ Attestation verified successfully", "success");
+    addLog("✓ Attestation verified successfully (NRAS trust chain)", "success");
     
     // Import TEE public key
     await client.importTEEPublicKey(teePublicKeyJwk);
     updateCryptoField('tee-pubkey', JSON.stringify(teePublicKeyJwk).substring(0, 60) + '...');
-    addLog("✓ TEE public key imported", "success");
+    addLog("✓ DGX Spark GPU public key imported", "success");
     
     // Derive shared encryption key
-    addLog("Performing ECDH key exchange...", "info");
+    addLog("Performing ECDH key exchange bound to attested DGX Spark session...", "info");
     await client.deriveSharedKey();
     updateCryptoField('shared-secret', '✓ Established (256-bit AES-GCM)');
     addLog("✓ Shared secret derived", "success");
@@ -317,14 +319,14 @@ async function handleSend() {
         addMessage(prompt, 'user');
         chatInput.value = '';
         
-        addLog("Encrypting prompt...", "info");
+        addLog("Encrypting prompt with DGX Spark session key (AES-256-GCM)...", "info");
         
         // Encrypt the prompt
         const encrypted = await client.encrypt(prompt);
         addLog("✓ Prompt encrypted (" + encrypted.data.length + " bytes)", "success");
         
         // Simulate sending to TEE and getting response
-        addLog("Sending encrypted prompt to TEE...", "info");
+        addLog("Sending encrypted prompt to DGX Spark enclave...", "info");
         await simulateEncryptedInference(client, encrypted, prompt);
         
     } catch (error) {
@@ -338,26 +340,26 @@ async function simulateEncryptedInference(client, encryptedPrompt, originalPromp
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    addLog("TEE received encrypted prompt", "info");
-    addLog("TEE decrypting with shared key...", "info");
+    addLog("DGX Spark TEE received encrypted prompt", "info");
+    addLog("DGX Spark TEE decrypting with shared key...", "info");
     
     // Simulate TEE decrypting (in reality, this happens server-side)
     await new Promise(resolve => setTimeout(resolve, 300));
-    addLog("✓ TEE decrypted prompt", "success");
+    addLog("✓ DGX Spark TEE decrypted prompt", "success");
     
     // Simulate inference
-    addLog("Running inference in TEE...", "info");
+    addLog("Running inference inside the attested DGX Spark TEE...", "info");
     const response = generateMockResponse(originalPrompt);
     
     // Simulate streaming response
-    addLog("Encrypting response...", "info");
+    addLog("Simulating DGX Spark TEE encrypting response...", "info");
     const encryptedResponse = await client.encrypt(response);
     addLog("✓ Response encrypted (" + encryptedResponse.data.length + " bytes)", "success");
     
-    addLog("Receiving encrypted response...", "info");
+    addLog("Receiving encrypted response from DGX Spark enclave...", "info");
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    addLog("Decrypting response...", "info");
+    addLog("Decrypting response in-browser with DGX Spark session key...", "info");
     const decryptedResponse = await client.decrypt(encryptedResponse);
     addLog("✓ Response decrypted", "success");
     
@@ -368,10 +370,10 @@ async function simulateEncryptedInference(client, encryptedPrompt, originalPromp
 // Generate mock response for demo
 function generateMockResponse(prompt) {
     const responses = [
-        "This is a simulated response demonstrating end-to-end encryption. In production, this would be a real LLM inference running inside a NVIDIA Blackwell TEE.",
-        "Your prompt was encrypted with AES-256-GCM before leaving your browser. The TEE decrypted it, processed it, and encrypted the response before sending it back.",
-        "The encryption keys were established using ECDH key exchange after verifying the TEE's attestation. This ensures your data remains private throughout the entire process.",
-        "In the Cerumbra Network, this same protocol will enable private AI inference across a decentralized network of TEE-enabled nodes."
+        "This is a simulated response showing the DGX Spark flow: prompts stay encrypted until they reach the attested NVIDIA Blackwell TEE.",
+        "Your prompt was encrypted with AES-256-GCM before leaving your browser. The DGX Spark enclave decrypted it, processed it, and encrypted the response before sending it back.",
+        "The encryption keys were established using ECDH after verifying the NRAS-backed attestation from the DGX Spark node. This keeps your data private end-to-end.",
+        "In the Cerumbra Network, this DGX Spark attestation + encryption pattern will extend to other NVIDIA confidential-compute nodes."
     ];
     
     return responses[Math.floor(Math.random() * responses.length)];
