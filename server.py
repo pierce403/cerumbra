@@ -13,10 +13,12 @@ For demo purposes, this simulates:
 4. Encrypted inference processing
 """
 
+import argparse
 import asyncio
 import json
 import secrets
 import base64
+import os
 from typing import Dict, Optional
 from dataclasses import dataclass
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -310,23 +312,45 @@ class CerumbraServer:
             }
 
 
-async def main():
+async def main(host: str, port: int):
     """Start Cerumbra server"""
     server = CerumbraServer()
     
     print("=" * 60)
     print("Cerumbra TEE Server (Simulated)")
     print("=" * 60)
-    print("Starting server on ws://localhost:8765")
+    print(f"Starting server on ws://{host}:{port}")
     print("Waiting for browser connections...")
     print()
     
-    async with serve(server.handle_client, "localhost", 8765):
+    async with serve(server.handle_client, host, port):
         await asyncio.Future()  # Run forever
 
 
 if __name__ == "__main__":
+    default_host = os.getenv("CERUMBRA_SERVER_HOST", "0.0.0.0")
+    default_port_env = os.getenv("CERUMBRA_SERVER_PORT")
     try:
-        asyncio.run(main())
+        default_port = int(default_port_env) if default_port_env is not None else 8765
+    except (TypeError, ValueError):
+        default_port = 8765
+
+    parser = argparse.ArgumentParser(description="Cerumbra DGX Spark shielded inference server")
+    parser.add_argument(
+        "--host",
+        default=default_host,
+        help="Host interface to bind (default: %(default)s or CERUMBRA_SERVER_HOST env)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=default_port,
+        help="WebSocket port to bind (default: %(default)s or CERUMBRA_SERVER_PORT env)",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        asyncio.run(main(args.host, args.port))
     except KeyboardInterrupt:
         print("\nServer stopped")

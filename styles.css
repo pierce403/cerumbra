@@ -353,6 +353,31 @@ code {
     border-radius: 8px;
 }
 
+.server-endpoint {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.server-endpoint label {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.server-endpoint input {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--background-color);
+    color: var(--text-color);
+}
+
+.server-endpoint small {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
 .status-dot {
     width: 12px;
     height: 12px;

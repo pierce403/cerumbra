@@ -9,6 +9,8 @@ class CerumbraClient {
         this.ws = null;
         this.nonce = null;
         this.sessionId = null;
+        this.pendingResolvers = new Map();
+        this.defaultHandler = null;
     }
 
     // Generate browser-side ECDH key pair
@@ -137,7 +139,19 @@ class CerumbraClient {
         // 4. Validate nonce freshness
         
         // For demo, we just check nonce matches
-        const receivedNonce = new Uint8Array(attestation.nonce);
+        let receivedNonce;
+        if (attestation && Array.isArray(attestation.nonce)) {
+            receivedNonce = new Uint8Array(attestation.nonce);
+        } else if (attestation && attestation.quote && typeof attestation.quote.nonce === 'string') {
+            const decoded = atob(attestation.quote.nonce);
+            receivedNonce = new Uint8Array(decoded.length);
+            for (let i = 0; i < decoded.length; i++) {
+                receivedNonce[i] = decoded.charCodeAt(i);
+            }
+        } else {
+            throw new Error("Attestation did not include a nonce");
+        }
+
         const matches = this.nonce.every((byte, i) => byte === receivedNonce[i]);
         
         if (!matches) {
@@ -147,9 +161,72 @@ class CerumbraClient {
         return true;
     }
 
-    // Connect to simulated TEE server
+    setDefaultHandler(handler) {
+        this.defaultHandler = handler;
+    }
+
+    waitForMessage(type, timeoutMs = 10000) {
+        if (this.pendingResolvers.has(type)) {
+            throw new Error(`Already waiting for message of type ${type}`);
+        }
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingResolvers.delete(type);
+                reject(new Error(`Timed out waiting for ${type}`));
+            }, timeoutMs);
+
+            this.pendingResolvers.set(type, {
+                resolve: (payload) => {
+                    clearTimeout(timer);
+                    resolve(payload);
+                },
+                reject: (error) => {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    _handleIncomingMessage(message) {
+        const type = message.type;
+
+        if (type && this.pendingResolvers.has(type)) {
+            const { resolve } = this.pendingResolvers.get(type);
+            this.pendingResolvers.delete(type);
+            resolve(message);
+            return;
+        }
+
+        if (type === "error") {
+            addLog("Server error: " + message.message, "error");
+            return;
+        }
+
+        if (!this.defaultHandler) {
+            console.warn("Unhandled message from server:", message);
+            return;
+        }
+
+        try {
+            const maybePromise = this.defaultHandler(message);
+            if (maybePromise && typeof maybePromise.catch === 'function') {
+                maybePromise.catch((err) => {
+                    addLog("Error handling server message: " + err.message, "error");
+                });
+            }
+        } catch (handlerError) {
+            addLog("Error handling server message: " + handlerError.message, "error");
+        }
+    }
+
+    // Connect to DGX Spark TEE server
     async connect(serverUrl) {
         return new Promise((resolve, reject) => {
+            this.pendingResolvers.clear();
+            this.sessionId = null;
+
             this.ws = new WebSocket(serverUrl);
             
             this.ws.onopen = () => {
@@ -166,6 +243,15 @@ class CerumbraClient {
                 addLog("WebSocket connection closed", "info");
                 updateStatus("Not Connected", "disconnected");
             };
+
+            this.ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    this._handleIncomingMessage(message);
+                } catch (parseError) {
+                    addLog("Failed to parse server message", "error");
+                }
+            };
         });
     }
 
@@ -173,16 +259,6 @@ class CerumbraClient {
     send(message) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(message));
-        }
-    }
-
-    // Set message handler
-    onMessage(handler) {
-        if (this.ws) {
-            this.ws.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                handler(message);
-            };
         }
     }
 }
@@ -196,6 +272,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const connectBtn = document.getElementById('connect-btn');
     const sendBtn = document.getElementById('send-btn');
     const chatInput = document.getElementById('chat-input');
+    const serverUrlInput = document.getElementById('server-url');
+    
+    const defaultServerUrl = resolveDefaultServerUrl();
+    if (serverUrlInput) {
+        serverUrlInput.value = defaultServerUrl;
+        serverUrlInput.addEventListener('change', () => {
+            rememberServerUrl(serverUrlInput.value.trim());
+        });
+    }
 
     connectBtn.addEventListener('click', handleConnect);
     sendBtn.addEventListener('click', handleSend);
@@ -209,19 +294,24 @@ document.addEventListener('DOMContentLoaded', () => {
     addLog("Note: This demo targets the DGX Spark Blackwell confidential computing stack only.", "info");
 });
 
-// Handle connection to simulated TEE
+// Handle connection to DGX Spark TEE
 async function handleConnect() {
     const connectBtn = document.getElementById('connect-btn');
     const sendBtn = document.getElementById('send-btn');
     const chatInput = document.getElementById('chat-input');
+    const serverUrlInput = document.getElementById('server-url');
+    const serverUrl = (serverUrlInput.value || '').trim() || resolveDefaultServerUrl();
 
     try {
         connectBtn.disabled = true;
+        sendBtn.disabled = true;
+        chatInput.disabled = true;
         updateStatus("Connecting...", "connecting");
         addLog("Initializing Cerumbra client...", "info");
 
         // Initialize client
         client = new CerumbraClient();
+        client.setDefaultHandler(handleServerMessage);
 
         // Generate browser key pair
         addLog("Generating browser ECDH key pair for DGX Spark session...", "info");
@@ -233,11 +323,50 @@ async function handleConnect() {
         // Generate attestation nonce
         const nonce = client.generateNonce();
         addLog("Generated attestation nonce: " + arrayToHex(nonce).substring(0, 16) + "...", "info");
-        addLog("Calling DGX Spark `/attest` endpoint with nonce challenge (simulated GET /attest?nonce=…)", "info");
 
-        // For demo purposes, simulate TEE connection
-        // In production, this would connect to actual TEE server
-        await simulateTEEConnection(client, publicKeyJwk, nonce);
+        rememberServerUrl(serverUrl);
+        addLog("Connecting to DGX Spark WebSocket endpoint: " + serverUrl, "info");
+        await client.connect(serverUrl);
+
+        addLog("Requesting NRAS-backed attestation from DGX Spark...", "info");
+        const attestationPromise = client.waitForMessage("attestation_response");
+        client.send({
+            type: "attestation_request",
+            nonce: Array.from(nonce)
+        });
+        const attestation = await attestationPromise;
+        addLog("Received DGX Spark attestation material", "info");
+        addLog("Verifying NRAS attestation (simulated coordinator check)...", "info");
+
+        // Verify attestation
+        await client.verifyAttestation(attestation);
+        updateCryptoField('attestation-status', '✓ Verified');
+        addLog("✓ Attestation verified successfully (NRAS trust chain)", "success");
+
+        // Import TEE public key
+        const teePublicKeyJwk = attestation.teePublicKey;
+        await client.importTEEPublicKey(teePublicKeyJwk);
+        updateCryptoField('tee-pubkey', JSON.stringify(teePublicKeyJwk).substring(0, 60) + '...');
+        addLog("✓ DGX Spark GPU public key imported", "success");
+
+        // Derive shared encryption key
+        addLog("Performing ECDH key exchange bound to attested DGX Spark session...", "info");
+        await client.deriveSharedKey();
+        updateCryptoField('shared-secret', '✓ Established (256-bit AES-GCM)');
+        addLog("✓ Shared secret derived", "success");
+        addLog("✓ Encryption key derived using HKDF", "success");
+
+        addLog("Sending browser public key to complete DGX Spark key exchange...", "info");
+        const keyExchangePromise = client.waitForMessage("key_exchange_complete");
+        client.send({
+            type: "key_exchange",
+            publicKey: publicKeyJwk
+        });
+        const keyExchange = await keyExchangePromise;
+        client.sessionId = keyExchange.sessionId || null;
+        if (client.sessionId) {
+            addLog("DGX Spark session established: " + client.sessionId.substring(0, 8) + "...", "info");
+        }
 
         updateStatus("Connected & Encrypted", "connected");
         isConnected = true;
@@ -250,70 +379,33 @@ async function handleConnect() {
     } catch (error) {
         addLog("Connection failed: " + error.message, "error");
         updateStatus("Connection Failed", "disconnected");
+        if (client && client.ws) {
+            try {
+                client.ws.close();
+            } catch (closeError) {
+                console.warn("Error closing WebSocket after failure:", closeError);
+            }
+        }
         connectBtn.disabled = false;
+        sendBtn.disabled = true;
+        chatInput.disabled = true;
         connectBtn.textContent = "Retry Connection";
     }
-}
-
-// Simulate DGX Spark attestation flow and key exchange
-async function simulateTEEConnection(client, browserPublicKey, nonce) {
-    addLog("DGX Spark node returning NRAS-signed attestation bundle + ephemeral GPU ECDH key bound to your nonce...", "info");
-    
-    // Simulate TEE generating its own key pair
-    const teeKeyPair = await crypto.subtle.generateKey(
-        {
-            name: "ECDH",
-            namedCurve: "P-256"
-        },
-        true,
-        ["deriveKey", "deriveBits"]
-    );
-    
-    const teePublicKeyJwk = await crypto.subtle.exportKey("jwk", teeKeyPair.publicKey);
-    
-    // Simulate attestation response
-    const attestation = {
-        type: "attestation_response",
-        nonce: Array.from(nonce),
-        quote: {
-            measurements: "simulated_pcr_values",
-            signature: "simulated_signature"
-        },
-        certChain: ["simulated_cert_chain"],
-        teePublicKey: teePublicKeyJwk
-    };
-    
-    addLog("Received DGX Spark attestation material", "info");
-    addLog("Verifying NRAS attestation (simulated coordinator check)...", "info");
-    
-    // Verify attestation
-    await client.verifyAttestation(attestation);
-    updateCryptoField('attestation-status', '✓ Verified');
-    addLog("✓ Attestation verified successfully (NRAS trust chain)", "success");
-    
-    // Import TEE public key
-    await client.importTEEPublicKey(teePublicKeyJwk);
-    updateCryptoField('tee-pubkey', JSON.stringify(teePublicKeyJwk).substring(0, 60) + '...');
-    addLog("✓ DGX Spark GPU public key imported", "success");
-    
-    // Derive shared encryption key
-    addLog("Performing ECDH key exchange bound to attested DGX Spark session...", "info");
-    await client.deriveSharedKey();
-    updateCryptoField('shared-secret', '✓ Established (256-bit AES-GCM)');
-    addLog("✓ Shared secret derived", "success");
-    addLog("✓ Encryption key derived using HKDF", "success");
-    
-    // Store TEE key pair for simulation
-    client.teeKeyPair = teeKeyPair;
 }
 
 // Handle sending encrypted message
 async function handleSend() {
     const chatInput = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
     const prompt = chatInput.value.trim();
     
     if (!prompt) return;
+    if (!isConnected || !client || !client.encryptionKey) {
+        addLog("Cannot send prompt until DGX Spark session is established.", "error");
+        return;
+    }
     
+    sendBtn.disabled = true;
     try {
         // Add user message to chat
         addMessage(prompt, 'user');
@@ -325,58 +417,86 @@ async function handleSend() {
         const encrypted = await client.encrypt(prompt);
         addLog("✓ Prompt encrypted (" + encrypted.data.length + " bytes)", "success");
         
-        // Simulate sending to TEE and getting response
         addLog("Sending encrypted prompt to DGX Spark enclave...", "info");
-        await simulateEncryptedInference(client, encrypted, prompt);
+        const responsePromise = client.waitForMessage("inference_response");
+        client.send({
+            type: "encrypted_inference",
+            prompt: encrypted
+        });
+
+        const inferenceResponse = await responsePromise;
+        await processInferenceResponse(inferenceResponse);
         
     } catch (error) {
         addLog("Error: " + error.message, "error");
         addMessage("Error processing request: " + error.message, 'system');
+    } finally {
+        if (isConnected) {
+            sendBtn.disabled = false;
+        }
     }
 }
 
-// Simulate encrypted inference in TEE
-async function simulateEncryptedInference(client, encryptedPrompt, originalPrompt) {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    addLog("DGX Spark TEE received encrypted prompt", "info");
-    addLog("DGX Spark TEE decrypting with shared key...", "info");
-    
-    // Simulate TEE decrypting (in reality, this happens server-side)
-    await new Promise(resolve => setTimeout(resolve, 300));
-    addLog("✓ DGX Spark TEE decrypted prompt", "success");
-    
-    // Simulate inference
-    addLog("Running inference inside the attested DGX Spark TEE...", "info");
-    const response = generateMockResponse(originalPrompt);
-    
-    // Simulate streaming response
-    addLog("Simulating DGX Spark TEE encrypting response...", "info");
-    const encryptedResponse = await client.encrypt(response);
-    addLog("✓ Response encrypted (" + encryptedResponse.data.length + " bytes)", "success");
-    
+async function processInferenceResponse(message) {
+    if (!message || !message.response) {
+        throw new Error("Malformed inference response from DGX Spark");
+    }
+
+    addLog("DGX Spark enclave returned encrypted payload", "info");
     addLog("Receiving encrypted response from DGX Spark enclave...", "info");
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
     addLog("Decrypting response in-browser with DGX Spark session key...", "info");
-    const decryptedResponse = await client.decrypt(encryptedResponse);
+
+    const decryptedResponse = await client.decrypt(message.response);
     addLog("✓ Response decrypted", "success");
-    
-    // Display response with streaming effect
+
     await streamMessage(decryptedResponse, 'assistant');
 }
 
-// Generate mock response for demo
-function generateMockResponse(prompt) {
-    const responses = [
-        "This is a simulated response showing the DGX Spark flow: prompts stay encrypted until they reach the attested NVIDIA Blackwell TEE.",
-        "Your prompt was encrypted with AES-256-GCM before leaving your browser. The DGX Spark enclave decrypted it, processed it, and encrypted the response before sending it back.",
-        "The encryption keys were established using ECDH after verifying the NRAS-backed attestation from the DGX Spark node. This keeps your data private end-to-end.",
-        "In the Cerumbra Network, this DGX Spark attestation + encryption pattern will extend to other NVIDIA confidential-compute nodes."
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+function handleServerMessage(message) {
+    if (!message || !message.type) {
+        addLog("Received malformed message from server.", "error");
+        return;
+    }
+
+    if (message.type === "inference_response") {
+        return processInferenceResponse(message);
+    }
+
+    if (message.type === "key_exchange_complete") {
+        addLog("Received duplicate key exchange confirmation.", "info");
+        return;
+    }
+
+    addLog("Unhandled server message type: " + message.type, "info");
+}
+
+function resolveDefaultServerUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const paramValue = params.get('server');
+    if (paramValue) {
+        return paramValue;
+    }
+
+    try {
+        const stored = localStorage.getItem('cerumbraServerUrl');
+        if (stored) {
+            return stored;
+        }
+    } catch (storageError) {
+        console.warn("Unable to read saved server URL:", storageError);
+    }
+
+    return "ws://localhost:8765";
+}
+
+function rememberServerUrl(url) {
+    if (!url) return;
+
+    try {
+        localStorage.setItem('cerumbraServerUrl', url);
+    } catch (storageError) {
+        console.warn("Unable to store server URL preference:", storageError);
+    }
 }
 
 // UI Helper Functions

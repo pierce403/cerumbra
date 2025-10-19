@@ -83,6 +83,17 @@ xdg-open index.html
    - ECDH key exchange
    - Encrypted inference
 
+### DGX Spark Launcher Scripts
+
+For day-to-day use on a DGX Spark, the repo now includes launchers that wire up the simulated shielded inference stack:
+
+- `./cerumbra-server.sh`  
+  Installs Python dependencies (using `CERUMBRA_PYTHON_BIN` if provided) and starts `server.py` with shielded inference enabled. By default it binds to `0.0.0.0:8765`; override via `CERUMBRA_SERVER_HOST` and `CERUMBRA_SERVER_PORT` or `--host/--port`.
+- `./cerumbra-client.sh`  
+  Serves the static web client with `python -m http.server` (bind/port configurable through `CERUMBRA_CLIENT_BIND` and `CERUMBRA_CLIENT_PORT`). Set `CERUMBRA_SERVER_URL` or append `?server=ws://host:port` to the browser URL so the UI points at your DGX Spark backend.
+
+The intent is to run the server launcher directly on the DGX Spark node and point browser clients at it, but you can run both scripts on the same workstation for local development.
+
 ## 📖 How It Works
 
 ### 1. Key Generation
