@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Node.js (for potential future tooling)
+node_modules/
+package-lock.json
+yarn.lock
