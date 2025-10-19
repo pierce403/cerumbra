@@ -60,6 +60,9 @@ class CerumbraTEE:
     def __init__(self):
         self.state = self._initialize_tee()
         self.sessions: Dict[str, bytes] = {}
+        self.mode = os.getenv("CERUMBRA_DEPLOYMENT_MODE", "production").lower()
+        self.gpu_model = os.getenv("CERUMBRA_GPU_MODEL", "Unknown")
+        self.confidential_compute = os.getenv("CERUMBRA_TEE_CONF_MODE", "Unknown")
     
     def _initialize_tee(self) -> TEEState:
         """Initialize TEE with key pair and measurements"""
@@ -115,6 +118,9 @@ class CerumbraTEE:
         
         return {
             "type": "attestation_response",
+            "mode": self.mode,
+            "gpuModel": self.gpu_model,
+            "confidentialCompute": self.confidential_compute,
             "quote": quote,
             "signature": quote_signature,
             "teePublicKey": jwk,
@@ -274,6 +280,8 @@ class CerumbraServer:
             nonce = bytes(data["nonce"])
             attestation = self.tee.generate_attestation(nonce)
             print(f"Generated attestation for session {session_id}")
+            if self.tee.mode != "production":
+                print("Note: Attestation is simulated (test mode).")
             return attestation
             
         elif msg_type == "key_exchange":
@@ -319,6 +327,15 @@ async def main(host: str, port: int):
     print("=" * 60)
     print("Cerumbra TEE Server (Simulated)")
     print("=" * 60)
+    deployment_mode = os.getenv("CERUMBRA_DEPLOYMENT_MODE", "production").lower()
+    gpu_model = os.getenv("CERUMBRA_GPU_MODEL", "Unknown")
+    conf_mode = os.getenv("CERUMBRA_TEE_CONF_MODE", "Unknown")
+    print(f"Detected GPU model: {gpu_model}")
+    print(f"Confidential compute mode: {conf_mode}")
+    if deployment_mode != "production":
+        print("WARNING: Running in TEST MODE - remote attestation is simulated.")
+    else:
+        print("Blackwell confidential computing detected. Shielded inference enabled.")
     print(f"Starting server on ws://{host}:{port}")
     print("Waiting for browser connections...")
     print()

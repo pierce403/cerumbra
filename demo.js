@@ -11,6 +11,9 @@ class CerumbraClient {
         this.sessionId = null;
         this.pendingResolvers = new Map();
         this.defaultHandler = null;
+        this.deploymentMode = "production";
+        this.serverGpuModel = "Unknown";
+        this.confidentialCompute = "Unknown";
     }
 
     // Generate browser-side ECDH key pair
@@ -340,8 +343,27 @@ async function handleConnect() {
 
         // Verify attestation
         await client.verifyAttestation(attestation);
-        updateCryptoField('attestation-status', '✓ Verified');
+
+        client.deploymentMode = (attestation.mode || 'production').toLowerCase();
+        client.serverGpuModel = attestation.gpuModel || "Unknown";
+        client.confidentialCompute = attestation.confidentialCompute || "Unknown";
+
+        let attestationStatus = "✓ Verified";
+        if (client.deploymentMode !== "production") {
+            attestationStatus += " (Simulation)";
+            addLog("Server reported simulation/test mode. Hardware-backed attestation is not active.", "warning");
+        } else if (client.confidentialCompute && client.confidentialCompute !== "Unknown") {
+            attestationStatus += " (" + client.confidentialCompute + ")";
+        }
+        updateCryptoField('attestation-status', attestationStatus);
         addLog("✓ Attestation verified successfully (NRAS trust chain)", "success");
+
+        if (client.serverGpuModel && client.serverGpuModel !== "Unknown") {
+            addLog("DGX Spark GPU model: " + client.serverGpuModel, "info");
+        }
+        if (client.confidentialCompute && client.confidentialCompute !== "Unknown") {
+            addLog("Confidential compute mode: " + client.confidentialCompute, "info");
+        }
 
         // Import TEE public key
         const teePublicKeyJwk = attestation.teePublicKey;
@@ -368,13 +390,20 @@ async function handleConnect() {
             addLog("DGX Spark session established: " + client.sessionId.substring(0, 8) + "...", "info");
         }
 
-        updateStatus("Connected & Encrypted", "connected");
+        const statusText = client.deploymentMode !== "production"
+            ? "Connected (Simulation)"
+            : "Connected & Encrypted";
+        updateStatus(statusText, "connected");
         isConnected = true;
         sendBtn.disabled = false;
         chatInput.disabled = false;
         connectBtn.textContent = "Connected";
-        addLog("✓ Secure channel established with DGX Spark Blackwell TEE", "success");
-        addLog("Ready for encrypted inference on DGX Spark!", "success");
+        if (client.deploymentMode !== "production") {
+            addLog("Simulation mode: encrypted prompts are handled locally. Deploy on DGX Spark with Blackwell confidential computing enabled for hardware-backed protection.", "warning");
+        } else {
+            addLog("✓ Secure channel established with DGX Spark Blackwell TEE", "success");
+            addLog("Ready for encrypted inference on DGX Spark!", "success");
+        }
 
     } catch (error) {
         addLog("Connection failed: " + error.message, "error");
