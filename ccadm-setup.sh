@@ -17,6 +17,11 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# Determine script directory and set up log directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CERUMBRA_LOG_DIR="${SCRIPT_DIR}/.cerumbra-logs"
+mkdir -p "${CERUMBRA_LOG_DIR}"
+
 CUDA_KEYRING_TMP=""
 NVIDIA_CCADM_DEB=""
 DOCS_URL="https://docs.nvidia.com/confidential-computing/latest/deployment-guide/index.html"
@@ -81,7 +86,7 @@ ensure_nvidia_ccadm_available() {
 
     echo "[Cerumbra] Updating apt package listings..."
     # Allow update to continue even if some repos fail (we'll clean them up later)
-    apt-get update 2>&1 | tee /tmp/cerumbra-initial-apt-update.log || {
+    apt-get update 2>&1 | tee "${CERUMBRA_LOG_DIR}/apt-update-initial.log" || {
         echo "Warning: apt-get update reported issues, but continuing..." >&2
     }
 
@@ -101,20 +106,20 @@ ensure_nvidia_ccadm_available() {
         fi
         
         echo "[Cerumbra] Updating apt cache after repository changes..."
-        if ! apt-get update 2>&1 | tee /tmp/cerumbra-apt-update.log; then
+        if ! apt-get update 2>&1 | tee "${CERUMBRA_LOG_DIR}/apt-update.log"; then
             echo "Warning: apt-get update still has issues after cleanup." >&2
             # If update still fails and CC repo exists, remove it
-            if grep -q "confidential-computing" /tmp/cerumbra-apt-update.log 2>/dev/null; then
+            if grep -q "confidential-computing" "${CERUMBRA_LOG_DIR}/apt-update.log" 2>/dev/null; then
                 echo "[Cerumbra] Confidential computing repository is causing apt failures, removing it..." >&2
                 remove_confidential_computing_repo
                 echo "[Cerumbra] Retrying apt-get update..." >&2
-                apt-get update 2>&1 | tee /tmp/cerumbra-apt-update-retry.log || true
+                apt-get update 2>&1 | tee "${CERUMBRA_LOG_DIR}/apt-update-retry.log" || true
             fi
         fi
     fi
 
     echo "[Cerumbra] Installing nvidia-ccadm package..."
-    if ! apt-get install -y nvidia-ccadm 2>&1 | tee /tmp/cerumbra-ccadm-install.log; then
+    if ! apt-get install -y nvidia-ccadm 2>&1 | tee "${CERUMBRA_LOG_DIR}/ccadm-install.log"; then
         echo "Warning: apt-get install failed. Attempting direct package download..." >&2
         if ! download_and_install_nvidia_ccadm; then
             echo "" >&2
@@ -139,7 +144,7 @@ ensure_nvidia_ccadm_available() {
             echo "     ${DOCS_URL}" >&2
             echo "  4. Contact NVIDIA support for DGX Spark specific guidance" >&2
             echo "" >&2
-            echo "Install log: /tmp/cerumbra-ccadm-install.log" >&2
+            echo "Install log: ${CERUMBRA_LOG_DIR}/ccadm-install.log" >&2
             echo "======================================================================" >&2
             return 1
         fi
@@ -147,7 +152,7 @@ ensure_nvidia_ccadm_available() {
 
     if ! command -v nvidia-ccadm >/dev/null 2>&1; then
         echo "Error: nvidia-ccadm remains unavailable after installation." >&2
-        echo "Check installation log: /tmp/cerumbra-ccadm-install.log" >&2
+        echo "Check installation log: ${CERUMBRA_LOG_DIR}/ccadm-install.log" >&2
         echo "Refer to the NVIDIA documentation for troubleshooting guidance:" >&2
         echo "  ${DOCS_URL}" >&2
         return 1
@@ -522,7 +527,34 @@ echo "  OS: $(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release | 
 echo "  Kernel: $(uname -r)"
 if command -v nvidia-smi >/dev/null 2>&1; then
     echo "  NVIDIA Driver: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 2>/dev/null || echo 'unknown')"
-    echo "  GPU(s): $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | paste -sd ', ' || echo 'unknown')"
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1)
+    echo "  GPU(s): ${GPU_NAME:-unknown}"
+    
+    # Check for GB10 which does not support confidential computing
+    if echo "${GPU_NAME}" | grep -qi "GB10"; then
+        echo ""
+        echo "======================================================================"
+        echo "WARNING: GB10 Does Not Support Confidential Computing"
+        echo "======================================================================"
+        echo ""
+        echo "The NVIDIA GB10 chip does not support confidential computing."
+        echo "This is a hardware limitation confirmed by NVIDIA."
+        echo ""
+        echo "Confidential computing requires:"
+        echo "  - NVIDIA H100 GPUs (Hopper architecture)"
+        echo "  - Compatible CPU with TEE support (AMD SEV-SNP or Intel TDX)"
+        echo ""
+        echo "References:"
+        echo "  - https://forums.developer.nvidia.com/t/confidential-computing-support-for-dgx-spark-gb10/347945"
+        echo "  - https://developer.nvidia.com/blog/confidential-computing-on-h100-gpus-for-secure-and-trustworthy-ai/"
+        echo ""
+        echo "For Cerumbra to work with true TEE encryption, you will need"
+        echo "hardware that supports confidential computing (e.g., DGX H100)."
+        echo ""
+        echo "The Cerumbra server will continue to run in simulation mode on this system."
+        echo "======================================================================"
+        exit 1
+    fi
 fi
 echo ""
 

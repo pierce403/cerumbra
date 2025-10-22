@@ -210,3 +210,7 @@ __marimo__/
 node_modules/
 package-lock.json
 yarn.lock
+
+# Cerumbra specific
+.cerumbra-venv/
+.cerumbra-logs/

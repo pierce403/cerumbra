@@ -3,6 +3,18 @@
 **Date:** October 22, 2025  
 **Issue:** Script had syntax errors and repository availability issues
 
+## ⚠️ CRITICAL FINDING: DGX Spark GB10 Does NOT Support Confidential Computing
+
+**Hardware Limitation:** The NVIDIA DGX Spark with GB10 chip **does not support confidential computing**. This is a hardware limitation confirmed by NVIDIA representatives.
+
+**Source:** https://forums.developer.nvidia.com/t/confidential-computing-support-for-dgx-spark-gb10/347945
+
+**Requirements for Confidential Computing:**
+- NVIDIA H100 GPUs (Hopper architecture)
+- Compatible CPU with TEE support (AMD SEV-SNP or Intel TDX)
+
+**Impact:** The ccadm-setup.sh script will now detect GB10 GPUs and exit with a clear warning. Cerumbra will run in simulation mode on DGX Spark systems.
+
 ## Fixes Applied
 
 ### 1. Syntax Error (Line 375)
