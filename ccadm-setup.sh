@@ -8,8 +8,10 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+CUDA_KEYRING_TMP=""
+
 cleanup_tmp_artifacts() {
-    if [[ -n "${CUDA_KEYRING_TMP:-}" && -f "${CUDA_KEYRING_TMP}" ]]; then
+    if [[ -n "${CUDA_KEYRING_TMP}" && -f "${CUDA_KEYRING_TMP}" ]]; then
         rm -f "${CUDA_KEYRING_TMP}"
     fi
 }
@@ -32,8 +34,14 @@ ensure_nvidia_ccadm_available() {
         return 1
     fi
 
+    fix_conflicting_signed_by
+
     echo "[Cerumbra] Updating apt package listings..."
-    apt-get update
+    if ! apt-get update; then
+        echo "Error: apt-get update failed even after repository fixes. Resolve APT issues and retry." >&2
+        return 1
+    fi
+
     echo "[Cerumbra] Installing nvidia-ccadm package..."
     if ! apt-get install -y nvidia-ccadm; then
         echo "Error: Failed to install nvidia-ccadm via apt-get. Install the NVIDIA confidential computing utilities manually." >&2
@@ -125,6 +133,27 @@ add_nvidia_cuda_repo() {
 
     echo "[Cerumbra] NVIDIA CUDA repository added."
     return 0
+}
+
+fix_conflicting_signed_by() {
+    local repo_url="developer.download.nvidia.com/compute/cuda/repos"
+    local expected="Signed-By=/usr/share/keyrings/cuda-archive-keyring.gpg"
+
+    local files
+    files=$(grep -Rl "${repo_url}" /etc/apt --include="*.list" 2>/dev/null || true)
+    if [[ -z "${files}" ]]; then
+        return 0
+    fi
+
+    while IFS= read -r file; do
+        [[ -z "${file}" ]] && continue
+        if grep -q "Signed-By=" "${file}"; then
+            if ! grep -q "${expected}" "${file}"; then
+                echo "[Cerumbra] Updating Signed-By directive in ${file}"
+                sed -i "s#Signed-By=[^[:space:]]*#${expected}#g" "${file}"
+            fi
+        fi
+    done <<< "${files}"
 }
 
 echo "[Cerumbra] Checking confidential compute status..."
