@@ -9,10 +9,15 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 CUDA_KEYRING_TMP=""
+NVIDIA_CCADM_DEB=""
+DOCS_URL="https://docs.nvidia.com/confidential-computing/latest/deployment-guide/index.html"
 
 cleanup_tmp_artifacts() {
     if [[ -n "${CUDA_KEYRING_TMP}" && -f "${CUDA_KEYRING_TMP}" ]]; then
         rm -f "${CUDA_KEYRING_TMP}"
+    fi
+    if [[ -n "${NVIDIA_CCADM_DEB}" && -f "${NVIDIA_CCADM_DEB}" ]]; then
+        rm -f "${NVIDIA_CCADM_DEB}"
     fi
 }
 
@@ -56,12 +61,19 @@ ensure_nvidia_ccadm_available() {
 
     echo "[Cerumbra] Installing nvidia-ccadm package..."
     if ! apt-get install -y nvidia-ccadm; then
-        echo "Error: Failed to install nvidia-ccadm via apt-get. Install the NVIDIA confidential computing utilities manually." >&2
-        return 1
+        echo "Warning: apt-get install failed. Attempting direct package download..." >&2
+        if ! download_and_install_nvidia_ccadm; then
+            echo "Error: Unable to install nvidia-ccadm automatically." >&2
+            echo "Refer to NVIDIA confidential computing documentation for manual steps:" >&2
+            echo "  ${DOCS_URL}" >&2
+            return 1
+        fi
     fi
 
     if ! command -v nvidia-ccadm >/dev/null 2>&1; then
-        echo "Error: nvidia-ccadm remains unavailable after installation. Check the system package repositories." >&2
+        echo "Error: nvidia-ccadm remains unavailable after installation." >&2
+        echo "Refer to the NVIDIA documentation for troubleshooting guidance:" >&2
+        echo "  ${DOCS_URL}" >&2
         return 1
     fi
 }
@@ -231,6 +243,100 @@ Suites: /
 Components:
 Signed-By: /usr/share/keyrings/cuda-archive-keyring.gpg
 EOF
+}
+
+download_and_install_nvidia_ccadm() {
+    local release=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        release=$(lsb_release -rs)
+    elif [[ -f /etc/os-release ]]; then
+        release=$(grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+    fi
+
+    local distro=""
+    case "${release}" in
+        24.04*|24)
+            distro="ubuntu2404"
+            ;;
+        22.04*|22)
+            distro="ubuntu2204"
+            ;;
+        20.04*|20)
+            distro="ubuntu2004"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    local arch=""
+    if command -v dpkg >/dev/null 2>&1; then
+        arch=$(dpkg --print-architecture)
+    fi
+
+    local repo_arch="x86_64"
+    case "${arch}" in
+        amd64) repo_arch="x86_64" ;;
+        arm64) repo_arch="sbsa" ;;
+        *) repo_arch="x86_64" ;;
+    esac
+
+    if command -v apt-get >/dev/null 2>&1; then
+        if apt-get download nvidia-ccadm >/dev/null 2>&1; then
+            NVIDIA_CCADM_DEB="$(ls -t nvidia-ccadm_*.deb 2>/dev/null | head -n1 || true)"
+            if [[ -n "${NVIDIA_CCADM_DEB}" && -f "${NVIDIA_CCADM_DEB}" ]]; then
+                if dpkg -i "${NVIDIA_CCADM_DEB}"; then
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    local pkg_url="https://developer.download.nvidia.com/compute/confidential-computing/repos/${distro}/${repo_arch}/"
+    local index_tmp
+    index_tmp="$(mktemp)"
+
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL "${pkg_url}" -o "${index_tmp}"; then
+            rm -f "${index_tmp}"
+            return 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -q "${pkg_url}" -O "${index_tmp}"; then
+            rm -f "${index_tmp}"
+            return 1
+        fi
+    else
+        rm -f "${index_tmp}"
+        return 1
+    fi
+
+    local deb_name
+    deb_name="$(grep -Eo 'nvidia-ccadm_[^"]+\.deb' "${index_tmp}" | head -n1 || true)"
+    rm -f "${index_tmp}"
+
+    if [[ -z "${deb_name}" ]]; then
+        return 1
+    fi
+
+    NVIDIA_CCADM_DEB="$(mktemp)"
+    local full_url="${pkg_url}${deb_name}"
+    echo "[Cerumbra] Downloading ${deb_name} from ${full_url}"
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL "${full_url}" -o "${NVIDIA_CCADM_DEB}"; then
+            return 1
+        fi
+    else
+        if ! wget -q "${full_url}" -O "${NVIDIA_CCADM_DEB}"; then
+            return 1
+        fi
+    fi
+
+    if ! dpkg -i "${NVIDIA_CCADM_DEB}"; then
+        return 1
+    fi
+
+    return 0
 }
 
 echo "[Cerumbra] Checking confidential compute status..."
