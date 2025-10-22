@@ -386,21 +386,32 @@ verify_repo_endpoint() {
         *) repo_arch="x86_64" ;;
     esac
 
-    local url=""
+    local base=""
     if [[ "${kind}" == "confidential" ]]; then
-        url="https://developer.download.nvidia.com/compute/confidential-computing/repos/${distro}/${repo_arch}/Release"
+        base="https://developer.download.nvidia.com/compute/confidential-computing/repos/${distro}/${repo_arch}/"
     else
-        url="https://developer.download.nvidia.com/compute/cuda/repos/${distro}/${repo_arch}/Release"
+        base="https://developer.download.nvidia.com/compute/cuda/repos/${distro}/${repo_arch}/"
     fi
 
+    local candidates=("InRelease" "Release")
+    local url=""
+    for candidate in "${candidates[@]}"; do
+        url="${base}${candidate}"
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${url}" >/dev/null 2>&1; then
+                return 0
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if wget -q --tries=3 --timeout=5 -O - "${url}" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    done
+
     if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${url}" >/dev/null 2>&1; then
-            return 0
-        fi
+        curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${base}" >/dev/null 2>&1 && return 0
     elif command -v wget >/dev/null 2>&1; then
-        if wget -q --tries=3 --timeout=5 -O - "${url}" >/dev/null 2>&1; then
-            return 0
-        fi
+        wget -q --tries=3 --timeout=5 -O - "${base}" >/dev/null 2>&1 && return 0
     fi
 
     return 1
