@@ -33,13 +33,32 @@ cleanup_tmp_artifacts() {
 trap cleanup_tmp_artifacts EXIT
 
 ensure_nvidia_ccadm_available() {
+    # Check if nvidia-ccadm is in PATH
     if command -v nvidia-ccadm >/dev/null 2>&1; then
-        echo "[Cerumbra] ✓ nvidia-ccadm is already available"
+        echo "[Cerumbra] ✓ nvidia-ccadm is already available in PATH"
         nvidia-ccadm --version 2>/dev/null || echo "[Cerumbra] (version info unavailable)"
         return 0
     fi
+    
+    # Check common installation locations
+    local common_paths=(
+        "/usr/bin/nvidia-ccadm"
+        "/usr/local/bin/nvidia-ccadm"
+        "/opt/nvidia/ccadm/nvidia-ccadm"
+        "/usr/lib/nvidia-ccadm/nvidia-ccadm"
+    )
+    
+    for path in "${common_paths[@]}"; do
+        if [[ -x "${path}" ]]; then
+            echo "[Cerumbra] ✓ Found nvidia-ccadm at ${path}"
+            "${path}" --version 2>/dev/null || echo "[Cerumbra] (version info unavailable)"
+            # Add to PATH if not already there
+            export PATH="${path%/*}:${PATH}"
+            return 0
+        fi
+    done
 
-    echo "[Cerumbra] nvidia-ccadm not found. Attempting installation..."
+    echo "[Cerumbra] nvidia-ccadm not found in PATH or common locations. Attempting installation..."
     echo "[Cerumbra] Note: nvidia-ccadm is required for GPU confidential computing mode."
     echo "[Cerumbra] It may be bundled with NVIDIA drivers (550+ recommended for H100/Blackwell)"
 
@@ -61,28 +80,36 @@ ensure_nvidia_ccadm_available() {
     fi
 
     echo "[Cerumbra] Updating apt package listings..."
-    if ! apt-get update; then
-        echo "Error: apt-get update failed even after repository fixes. Resolve APT issues and retry." >&2
-        return 1
-    fi
+    # Allow update to continue even if some repos fail (we'll clean them up later)
+    apt-get update 2>&1 | tee /tmp/cerumbra-initial-apt-update.log || {
+        echo "Warning: apt-get update reported issues, but continuing..." >&2
+    }
 
     if ! apt-cache show nvidia-ccadm >/dev/null 2>&1; then
         echo "[Cerumbra] nvidia-ccadm not present in current APT sources. Adding confidential-computing repository..."
         if ! add_confidential_computing_repo; then
             echo "Warning: Failed to add confidential-computing repository configuration." >&2
+        else
+            # Note: As of Oct 2025, confidential computing repos may not be publicly available
+            # Verify and remove if it causes apt to fail
+            if ! verify_repo_endpoint "confidential"; then
+                echo "Warning: Unable to verify NVIDIA confidential-computing repository endpoint." >&2
+                echo "This is expected if the package is distributed through other channels." >&2
+                echo "Removing repository to prevent apt-get update failures..." >&2
+                remove_confidential_computing_repo
+            fi
         fi
         
-        # Note: As of Oct 2025, confidential computing repos may not be publicly available
-        # Continue even if repo verification fails, as nvidia-ccadm might be in CUDA repos
-        if ! verify_repo_endpoint "confidential"; then
-            echo "Warning: Unable to verify NVIDIA confidential-computing repository endpoint." >&2
-            echo "This is expected if the package is distributed through other channels." >&2
-            echo "Attempting to continue with available repositories..." >&2
-        fi
-        
+        echo "[Cerumbra] Updating apt cache after repository changes..."
         if ! apt-get update 2>&1 | tee /tmp/cerumbra-apt-update.log; then
-            echo "Warning: apt-get update reported issues. Continuing anyway..." >&2
-            cat /tmp/cerumbra-apt-update.log >&2
+            echo "Warning: apt-get update still has issues after cleanup." >&2
+            # If update still fails and CC repo exists, remove it
+            if grep -q "confidential-computing" /tmp/cerumbra-apt-update.log 2>/dev/null; then
+                echo "[Cerumbra] Confidential computing repository is causing apt failures, removing it..." >&2
+                remove_confidential_computing_repo
+                echo "[Cerumbra] Retrying apt-get update..." >&2
+                apt-get update 2>&1 | tee /tmp/cerumbra-apt-update-retry.log || true
+            fi
         fi
     fi
 
@@ -294,6 +321,16 @@ Suites: /
 Components:
 Signed-By: /usr/share/keyrings/cuda-archive-keyring.gpg
 EOF
+}
+
+remove_confidential_computing_repo() {
+    local target="/etc/apt/sources.list.d/nvidia-confidential-compute.sources"
+    if [[ -f "${target}" ]]; then
+        echo "[Cerumbra] Removing problematic confidential-computing repository..." >&2
+        rm -f "${target}"
+        return 0
+    fi
+    return 1
 }
 
 download_and_install_nvidia_ccadm() {
