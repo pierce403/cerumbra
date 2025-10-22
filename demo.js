@@ -14,6 +14,7 @@ class CerumbraClient {
         this.deploymentMode = "production";
         this.serverGpuModel = "Unknown";
         this.confidentialCompute = "Unknown";
+        this.modelId = "gpt-oss-20b";
     }
 
     // Generate browser-side ECDH key pair
@@ -278,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const serverUrlInput = document.getElementById('server-url');
     
     const defaultServerUrl = resolveDefaultServerUrl();
+    updateCryptoField('serving-model', 'gpt-oss-20b');
     if (serverUrlInput) {
         serverUrlInput.value = defaultServerUrl;
         serverUrlInput.addEventListener('change', () => {
@@ -347,6 +349,7 @@ async function handleConnect() {
         client.deploymentMode = (attestation.mode || 'production').toLowerCase();
         client.serverGpuModel = attestation.gpuModel || "Unknown";
         client.confidentialCompute = attestation.confidentialCompute || "Unknown";
+        client.modelId = attestation.modelId || "gpt-oss-20b";
 
         let attestationStatus = "✓ Verified";
         if (client.deploymentMode !== "production") {
@@ -360,6 +363,10 @@ async function handleConnect() {
 
         if (client.serverGpuModel && client.serverGpuModel !== "Unknown") {
             addLog("DGX Spark GPU model: " + client.serverGpuModel, "info");
+        }
+        if (client.modelId) {
+            updateCryptoField('serving-model', client.modelId);
+            addLog("Serving default model: " + client.modelId, "info");
         }
         if (client.confidentialCompute && client.confidentialCompute !== "Unknown") {
             addLog("Confidential compute mode: " + client.confidentialCompute, "info");

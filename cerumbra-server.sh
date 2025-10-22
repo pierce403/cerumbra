@@ -9,6 +9,7 @@ cd "$SCRIPT_DIR"
 PYTHON_BIN="${CERUMBRA_PYTHON_BIN:-python3}"
 HOST="${CERUMBRA_SERVER_HOST:-0.0.0.0}"
 PORT="${CERUMBRA_SERVER_PORT:-8765}"
+MODEL_ID="${CERUMBRA_MODEL_ID:-gpt-oss-20b}"
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
     echo "Error: ${PYTHON_BIN} is not available in PATH." >&2
@@ -75,6 +76,7 @@ echo "[Cerumbra] Environment preflight"
 echo "--------------------------------"
 echo "Deployment mode        : ${MODE}"
 echo "GPU model              : ${GPU_INFO}"
+echo "Default model          : ${MODEL_ID}"
 if [ "$NVSMI_PRESENT" = true ]; then
     if [ "$GPU_OK" = "true" ]; then
         echo "Blackwell GPU          : detected"
@@ -118,6 +120,7 @@ fi
 export CERUMBRA_DEPLOYMENT_MODE="$MODE"
 export CERUMBRA_GPU_MODEL="$GPU_INFO"
 export CERUMBRA_TEE_CONF_MODE="$TEE_CONF_STATUS"
+export CERUMBRA_MODEL_ID="$MODEL_ID"
 
 echo "[Cerumbra] DGX Spark Shielded Inference Server"
 echo "Preparing Python environment..."

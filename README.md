@@ -3,6 +3,7 @@
 **End-to-End Encrypted Conversations with GPUs**
 
 Cerumbra is a protocol and implementation for private, secure AI inference using browser-to-TEE (Trusted Execution Environment) encryption. It enables completely private conversations with GPU-accelerated AI models running in NVIDIA Blackwell TEEs, ensuring your prompts and responses remain encrypted throughout the entire inference process.
+The reference deployment targets NVIDIA DGX Spark systems and defaults to the `gpt-oss-20b` open model for shielded inference.
 
 ## 🌟 Features
 
@@ -88,7 +89,7 @@ xdg-open index.html
 For day-to-day use on a DGX Spark, the repo now includes launchers that wire up the simulated shielded inference stack:
 
 - `./cerumbra-server.sh`  
-  Installs Python dependencies (using `CERUMBRA_PYTHON_BIN` if provided), runs the Cerumbra verification suite, and performs a NVIDIA Blackwell + confidential-compute preflight before starting `server.py`. If the host is missing a Blackwell GPU or confidential computing is disabled, the launcher drops into an explicit simulation mode and prints remediation steps. By default it binds to `0.0.0.0:8765`; override via `CERUMBRA_SERVER_HOST` and `CERUMBRA_SERVER_PORT` or `--host/--port`.
+  Installs Python dependencies (using `CERUMBRA_PYTHON_BIN` if provided), runs the Cerumbra verification suite, and performs a NVIDIA Blackwell + confidential-compute preflight before starting `server.py`. If the host is missing a Blackwell GPU or confidential computing is disabled, the launcher drops into an explicit simulation mode and prints remediation steps. By default it binds to `0.0.0.0:8765`; override via `CERUMBRA_SERVER_HOST` and `CERUMBRA_SERVER_PORT` or `--host/--port`. The launcher exports `CERUMBRA_MODEL_ID`, which defaults to `gpt-oss-20b`; set this variable to swap in a different model id.
 - `./cerumbra-client.sh`  
   Serves the static web client with `python -m http.server` (bind/port configurable through `CERUMBRA_CLIENT_BIND` and `CERUMBRA_CLIENT_PORT`). Set `CERUMBRA_SERVER_URL` or append `?server=ws://host:port` to the browser URL so the UI points at your DGX Spark backend.
 

@@ -63,6 +63,7 @@ class CerumbraTEE:
         self.mode = os.getenv("CERUMBRA_DEPLOYMENT_MODE", "production").lower()
         self.gpu_model = os.getenv("CERUMBRA_GPU_MODEL", "Unknown")
         self.confidential_compute = os.getenv("CERUMBRA_TEE_CONF_MODE", "Unknown")
+        self.model_id = os.getenv("CERUMBRA_MODEL_ID", "gpt-oss-20b")
     
     def _initialize_tee(self) -> TEEState:
         """Initialize TEE with key pair and measurements"""
@@ -121,6 +122,7 @@ class CerumbraTEE:
             "mode": self.mode,
             "gpuModel": self.gpu_model,
             "confidentialCompute": self.confidential_compute,
+            "modelId": self.model_id,
             "quote": quote,
             "signature": quote_signature,
             "teePublicKey": jwk,
@@ -232,9 +234,9 @@ class CerumbraTEE:
         """
         # Simulated inference - in production, this would call the LLM
         responses = [
-            f"Received your prompt: '{prompt}'. This response was generated inside the TEE with complete privacy.",
-            "Your data is protected by hardware-based encryption throughout the entire inference process.",
-            "The Cerumbra protocol ensures end-to-end encryption from your browser to the GPU TEE.",
+            f"[{self.model_id}] Received your prompt: '{prompt}'. This response was generated inside the TEE with complete privacy.",
+            f"[{self.model_id}] Your data is protected by hardware-based encryption throughout the entire inference process.",
+            f"[{self.model_id}] The Cerumbra protocol ensures end-to-end encryption from your browser to the GPU TEE.",
         ]
         
         import random
@@ -330,8 +332,10 @@ async def main(host: str, port: int):
     deployment_mode = os.getenv("CERUMBRA_DEPLOYMENT_MODE", "production").lower()
     gpu_model = os.getenv("CERUMBRA_GPU_MODEL", "Unknown")
     conf_mode = os.getenv("CERUMBRA_TEE_CONF_MODE", "Unknown")
+    model_id = os.getenv("CERUMBRA_MODEL_ID", "gpt-oss-20b")
     print(f"Detected GPU model: {gpu_model}")
     print(f"Confidential compute mode: {conf_mode}")
+    print(f"Default model: {model_id}")
     if deployment_mode != "production":
         print("WARNING: Running in TEST MODE - remote attestation is simulated.")
     else:
