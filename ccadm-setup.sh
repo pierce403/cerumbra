@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 # Cerumbra helper to enable NVIDIA confidential computing mode on DGX Spark
+#
+# NOTE: As of Oct 2025, nvidia-ccadm package availability may vary by NVIDIA driver
+# version and system configuration. This script attempts multiple installation methods.
+# Tested repository URLs (as of Oct 2025):
+#   - CUDA repos (ubuntu2204, ubuntu2404): ✓ Available
+#   - Confidential computing repos: ⚠ May redirect or return 404
+#
+# If automatic installation fails, consult NVIDIA's official documentation:
+#   https://docs.nvidia.com/confidential-computing/
 
 set -euo pipefail
 
@@ -25,10 +34,14 @@ trap cleanup_tmp_artifacts EXIT
 
 ensure_nvidia_ccadm_available() {
     if command -v nvidia-ccadm >/dev/null 2>&1; then
+        echo "[Cerumbra] ✓ nvidia-ccadm is already available"
+        nvidia-ccadm --version 2>/dev/null || echo "[Cerumbra] (version info unavailable)"
         return 0
     fi
 
     echo "[Cerumbra] nvidia-ccadm not found. Attempting installation..."
+    echo "[Cerumbra] Note: nvidia-ccadm is required for GPU confidential computing mode."
+    echo "[Cerumbra] It may be bundled with NVIDIA drivers (550+ recommended for H100/Blackwell)"
 
     if ! command -v apt-get >/dev/null 2>&1; then
         echo "Error: apt-get not available. Install the NVIDIA confidential computing utilities manually (nvidia-ccadm)." >&2
@@ -56,36 +69,64 @@ ensure_nvidia_ccadm_available() {
     if ! apt-cache show nvidia-ccadm >/dev/null 2>&1; then
         echo "[Cerumbra] nvidia-ccadm not present in current APT sources. Adding confidential-computing repository..."
         if ! add_confidential_computing_repo; then
-            return 1
+            echo "Warning: Failed to add confidential-computing repository configuration." >&2
         fi
+        
+        # Note: As of Oct 2025, confidential computing repos may not be publicly available
+        # Continue even if repo verification fails, as nvidia-ccadm might be in CUDA repos
         if ! verify_repo_endpoint "confidential"; then
-            echo "Error: Unable to reach the NVIDIA confidential-computing repository endpoint." >&2
-            echo "Check network connectivity and consult: ${DOCS_URL}" >&2
-            return 1
+            echo "Warning: Unable to verify NVIDIA confidential-computing repository endpoint." >&2
+            echo "This is expected if the package is distributed through other channels." >&2
+            echo "Attempting to continue with available repositories..." >&2
         fi
-        if ! apt-get update; then
-            echo "Error: apt-get update failed after adding confidential-computing repository." >&2
-            return 1
+        
+        if ! apt-get update 2>&1 | tee /tmp/cerumbra-apt-update.log; then
+            echo "Warning: apt-get update reported issues. Continuing anyway..." >&2
+            cat /tmp/cerumbra-apt-update.log >&2
         fi
     fi
 
     echo "[Cerumbra] Installing nvidia-ccadm package..."
-    if ! apt-get install -y nvidia-ccadm; then
+    if ! apt-get install -y nvidia-ccadm 2>&1 | tee /tmp/cerumbra-ccadm-install.log; then
         echo "Warning: apt-get install failed. Attempting direct package download..." >&2
         if ! download_and_install_nvidia_ccadm; then
-            echo "Error: Unable to install nvidia-ccadm automatically." >&2
-            echo "Refer to NVIDIA confidential computing documentation for manual steps:" >&2
-            echo "  ${DOCS_URL}" >&2
+            echo "" >&2
+            echo "======================================================================" >&2
+            echo "ERROR: Unable to install nvidia-ccadm automatically" >&2
+            echo "======================================================================" >&2
+            echo "" >&2
+            echo "nvidia-ccadm is required to enable GPU confidential computing mode." >&2
+            echo "" >&2
+            echo "Possible reasons:" >&2
+            echo "  1. Package not yet available for your Ubuntu version" >&2
+            echo "  2. Requires specific NVIDIA driver version (550+ for H100/Blackwell)" >&2
+            echo "  3. May be included with NVIDIA driver installation" >&2
+            echo "  4. Network/repository access issues" >&2
+            echo "" >&2
+            echo "Manual installation options:" >&2
+            echo "  1. Install/upgrade NVIDIA drivers (may include nvidia-ccadm):" >&2
+            echo "     sudo apt install nvidia-driver-550-server" >&2
+            echo "  2. Check if nvidia-smi shows Hopper H100 or Blackwell GPUs:" >&2
+            echo "     nvidia-smi --query-gpu=name --format=csv" >&2
+            echo "  3. Consult NVIDIA confidential computing documentation:" >&2
+            echo "     ${DOCS_URL}" >&2
+            echo "  4. Contact NVIDIA support for DGX Spark specific guidance" >&2
+            echo "" >&2
+            echo "Install log: /tmp/cerumbra-ccadm-install.log" >&2
+            echo "======================================================================" >&2
             return 1
         fi
     fi
 
     if ! command -v nvidia-ccadm >/dev/null 2>&1; then
         echo "Error: nvidia-ccadm remains unavailable after installation." >&2
+        echo "Check installation log: /tmp/cerumbra-ccadm-install.log" >&2
         echo "Refer to the NVIDIA documentation for troubleshooting guidance:" >&2
         echo "  ${DOCS_URL}" >&2
         return 1
     fi
+    
+    echo "[Cerumbra] ✓ nvidia-ccadm successfully installed"
 }
 
 add_nvidia_cuda_repo() {
@@ -372,7 +413,7 @@ verify_repo_endpoint() {
         *)
             return 1
             ;;
-    }
+    esac
 
     local arch=""
     if command -v dpkg >/dev/null 2>&1; then
@@ -393,38 +434,101 @@ verify_repo_endpoint() {
         base="https://developer.download.nvidia.com/compute/cuda/repos/${distro}/${repo_arch}/"
     fi
 
+    echo "[Cerumbra] Verifying ${kind} repository: ${base}" >&2
+
     local candidates=("InRelease" "Release")
     local url=""
+    local http_code=""
     for candidate in "${candidates[@]}"; do
         url="${base}${candidate}"
         if command -v curl >/dev/null 2>&1; then
-            if curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${url}" >/dev/null 2>&1; then
+            http_code=$(curl -o /dev/null -w '%{http_code}' -fsSL --retry 2 --connect-timeout 5 "${url}" 2>/dev/null || echo "000")
+            if [[ "${http_code}" == "200" ]]; then
+                echo "[Cerumbra] ✓ Repository endpoint verified (HTTP ${http_code})" >&2
                 return 0
+            elif [[ "${http_code}" != "000" ]]; then
+                echo "[Cerumbra] ⚠ Repository returned HTTP ${http_code} for ${candidate}" >&2
             fi
         elif command -v wget >/dev/null 2>&1; then
-            if wget -q --tries=3 --timeout=5 -O - "${url}" >/dev/null 2>&1; then
+            if wget -q --spider --tries=2 --timeout=5 "${url}" 2>/dev/null; then
+                echo "[Cerumbra] ✓ Repository endpoint verified" >&2
                 return 0
             fi
         fi
     done
 
+    # Try base directory listing as fallback
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${base}" >/dev/null 2>&1 && return 0
+        http_code=$(curl -o /dev/null -w '%{http_code}' -fsSL --retry 2 --connect-timeout 5 "${base}" 2>/dev/null || echo "000")
+        if [[ "${http_code}" == "200" ]]; then
+            echo "[Cerumbra] ✓ Repository base directory accessible (HTTP ${http_code})" >&2
+            return 0
+        fi
+        echo "[Cerumbra] ✗ Repository verification failed (HTTP ${http_code})" >&2
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --tries=3 --timeout=5 -O - "${base}" >/dev/null 2>&1 && return 0
+        if wget -q --spider --tries=2 --timeout=5 "${base}" 2>/dev/null; then
+            echo "[Cerumbra] ✓ Repository base directory accessible" >&2
+            return 0
+        fi
+        echo "[Cerumbra] ✗ Repository verification failed" >&2
     fi
 
     return 1
 }
+
+echo "======================================================================"
+echo "Cerumbra DGX Spark Confidential Computing Setup"
+echo "======================================================================"
+echo ""
+echo "[Cerumbra] System information:"
+echo "  OS: $(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)"
+echo "  Kernel: $(uname -r)"
+if command -v nvidia-smi >/dev/null 2>&1; then
+    echo "  NVIDIA Driver: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 2>/dev/null || echo 'unknown')"
+    echo "  GPU(s): $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | paste -sd ', ' || echo 'unknown')"
+fi
+echo ""
 
 echo "[Cerumbra] Checking confidential compute status..."
 if ! ensure_nvidia_ccadm_available; then
     exit 1
 fi
 
+echo ""
+echo "[Cerumbra] Current GPU confidential computing status:"
 nvidia-ccadm --status || true
 
+echo ""
 echo "[Cerumbra] Enabling SECURE mode via nvidia-ccadm..."
-nvidia-ccadm --mode SECURE
+if nvidia-ccadm --mode SECURE; then
+    echo "[Cerumbra] ✓ SECURE mode successfully requested"
+else
+    echo "[Cerumbra] ✗ Failed to set SECURE mode" >&2
+    echo "This may indicate:"
+    echo "  - GPU doesn't support confidential computing"
+    echo "  - Driver version incompatibility"
+    echo "  - System configuration issue"
+    exit 1
+fi
 
-echo "[Cerumbra] Confidential compute requested. Please reboot the system to finalize."
+echo ""
+echo "======================================================================"
+echo "Setup Complete - Reboot Required"
+echo "======================================================================"
+echo ""
+echo "Next steps:"
+echo "  1. Reboot the system:"
+echo "       sudo reboot"
+echo ""
+echo "  2. After reboot, verify confidential computing is enabled:"
+echo "       nvidia-ccadm --status"
+echo "       # Should show: SECURE"
+echo ""
+echo "  3. Check GPU confidential computing mode:"
+echo "       nvidia-smi --query-gpu=conf_computing_mode --format=csv"
+echo "       # Should show: Enabled"
+echo ""
+echo "  4. Run Cerumbra server to test:"
+echo "       ./cerumbra-server.sh"
+echo ""
+echo "======================================================================"
