@@ -41,6 +41,11 @@ ensure_nvidia_ccadm_available() {
 
     fix_conflicting_signed_by
     disable_duplicate_cuda_lists
+    if ! verify_repo_endpoint "cuda"; then
+        echo "Error: Unable to reach the NVIDIA CUDA repository endpoint." >&2
+        echo "Check network connectivity and consult: ${DOCS_URL}" >&2
+        return 1
+    fi
 
     echo "[Cerumbra] Updating apt package listings..."
     if ! apt-get update; then
@@ -51,6 +56,11 @@ ensure_nvidia_ccadm_available() {
     if ! apt-cache show nvidia-ccadm >/dev/null 2>&1; then
         echo "[Cerumbra] nvidia-ccadm not present in current APT sources. Adding confidential-computing repository..."
         if ! add_confidential_computing_repo; then
+            return 1
+        fi
+        if ! verify_repo_endpoint "confidential"; then
+            echo "Error: Unable to reach the NVIDIA confidential-computing repository endpoint." >&2
+            echo "Check network connectivity and consult: ${DOCS_URL}" >&2
             return 1
         fi
         if ! apt-get update; then
@@ -337,6 +347,63 @@ download_and_install_nvidia_ccadm() {
     fi
 
     return 0
+}
+
+verify_repo_endpoint() {
+    local kind="$1"
+    local release=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        release=$(lsb_release -rs)
+    elif [[ -f /etc/os-release ]]; then
+        release=$(grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+    fi
+
+    local distro=""
+    case "${release}" in
+        24.04*|24)
+            distro="ubuntu2404"
+            ;;
+        22.04*|22)
+            distro="ubuntu2204"
+            ;;
+        20.04*|20)
+            distro="ubuntu2004"
+            ;;
+        *)
+            return 1
+            ;;
+    }
+
+    local arch=""
+    if command -v dpkg >/dev/null 2>&1; then
+        arch=$(dpkg --print-architecture)
+    fi
+
+    local repo_arch="x86_64"
+    case "${arch}" in
+        amd64) repo_arch="x86_64" ;;
+        arm64) repo_arch="sbsa" ;;
+        *) repo_arch="x86_64" ;;
+    esac
+
+    local url=""
+    if [[ "${kind}" == "confidential" ]]; then
+        url="https://developer.download.nvidia.com/compute/confidential-computing/repos/${distro}/${repo_arch}/Release"
+    else
+        url="https://developer.download.nvidia.com/compute/cuda/repos/${distro}/${repo_arch}/Release"
+    fi
+
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL --retry 3 --retry-connrefused --connect-timeout 5 "${url}" >/dev/null 2>&1; then
+            return 0
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -q --tries=3 --timeout=5 -O - "${url}" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    return 1
 }
 
 echo "[Cerumbra] Checking confidential compute status..."
