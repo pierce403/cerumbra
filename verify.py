@@ -4,15 +4,17 @@ Cerumbra Verification Script
 
 This script verifies that all components of Cerumbra are properly set up:
 1. Python dependencies are installed
-2. Cryptographic operations work correctly
-3. Server can start
-4. HTML/CSS/JS files exist and are valid
+2. Confidential computing is enabled on NVIDIA GPUs
+3. Cryptographic operations work correctly
+4. Server can start
+5. HTML/CSS/JS files exist and are valid
 """
 
 import sys
 import os
 import subprocess
 import json
+import shutil
 
 
 def print_header(text):
@@ -207,6 +209,60 @@ def test_server_imports():
         return False
 
 
+def check_confidential_compute():
+    """Ensure NVIDIA confidential computing is enabled when GPUs are present"""
+    print_header("Checking NVIDIA Confidential Compute")
+
+    if shutil.which("nvidia-smi") is None:
+        print("⚠️ nvidia-smi not found; skipping GPU confidential-compute check.")
+        print("   If you are on DGX Spark, install the NVIDIA drivers before running Cerumbra.")
+        return True
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=conf_computing_mode", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception as exc:
+        print(f"⚠️ Unable to query confidential compute state: {exc}")
+        print("   Cerumbra will continue, but secure mode could not be verified.")
+        return True
+
+    if result.returncode != 0:
+        print("❌ nvidia-smi returned a non-zero exit code while checking confidential compute mode.")
+        if result.stderr:
+            print(result.stderr.strip())
+        print("   Resolve the GPU driver issue and re-run the verification.")
+        return False
+
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        print("❌ nvidia-smi did not report any confidential compute data.")
+        print("   Ensure the GPU is visible (try `nvidia-smi`) before running Cerumbra.")
+        return False
+
+    secure_keywords = ("enabled", "secure", "on")
+    all_secure = True
+
+    for idx, line in enumerate(lines):
+        lower = line.lower()
+        if any(keyword in lower for keyword in secure_keywords):
+            print(f"✓ GPU {idx}: confidential compute mode reported as '{line}'")
+        else:
+            print(f"❌ GPU {idx}: confidential compute mode reported as '{line}' (expected Enabled/SECURE)")
+            all_secure = False
+
+    if not all_secure:
+        print("\n   Enable secure mode with:")
+        print("     sudo ./ccadm-setup.sh")
+        print("   Then reboot the node and re-run this verification.")
+
+    return all_secure
+
+
 def print_summary(results):
     """Print summary of all checks"""
     print_header("Verification Summary")
@@ -243,6 +299,7 @@ def main():
     results = {
         'Python Version': check_python_version(),
         'Dependencies': check_dependencies(),
+        'Confidential Compute': check_confidential_compute(),
         'Files': check_files(),
         'Crypto Operations': test_crypto_operations(),
         'HTML Structure': validate_html_structure(),
