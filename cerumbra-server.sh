@@ -6,16 +6,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PYTHON_BIN="${CERUMBRA_PYTHON_BIN:-python3}"
+BOOTSTRAP_PYTHON="${CERUMBRA_PYTHON_BIN:-python3}"
 HOST="${CERUMBRA_SERVER_HOST:-0.0.0.0}"
 PORT="${CERUMBRA_SERVER_PORT:-8765}"
 MODEL_ID="${CERUMBRA_MODEL_ID:-gpt-oss-20b}"
+VENV_DIR="${CERUMBRA_VENV_DIR:-${SCRIPT_DIR}/.cerumbra-venv}"
+PYTHON_BIN="${VENV_DIR}/bin/python"
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-    echo "Error: ${PYTHON_BIN} is not available in PATH." >&2
+if ! command -v "$BOOTSTRAP_PYTHON" >/dev/null 2>&1; then
+    echo "Error: ${BOOTSTRAP_PYTHON} is not available in PATH." >&2
     echo "Set CERUMBRA_PYTHON_BIN to an alternate interpreter if required." >&2
     exit 1
 fi
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "[Cerumbra] Creating Python virtual environment at ${VENV_DIR}"
+    "$BOOTSTRAP_PYTHON" -m venv "$VENV_DIR"
+fi
+
+export PATH="${VENV_DIR}/bin:${PATH}"
 
 NVSMI_PRESENT=false
 GPU_INFO="Unavailable"
