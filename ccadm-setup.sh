@@ -35,11 +35,23 @@ ensure_nvidia_ccadm_available() {
     fi
 
     fix_conflicting_signed_by
+    disable_duplicate_cuda_lists
 
     echo "[Cerumbra] Updating apt package listings..."
     if ! apt-get update; then
         echo "Error: apt-get update failed even after repository fixes. Resolve APT issues and retry." >&2
         return 1
+    fi
+
+    if ! apt-cache show nvidia-ccadm >/dev/null 2>&1; then
+        echo "[Cerumbra] nvidia-ccadm not present in current APT sources. Adding confidential-computing repository..."
+        if ! add_confidential_computing_repo; then
+            return 1
+        fi
+        if ! apt-get update; then
+            echo "Error: apt-get update failed after adding confidential-computing repository." >&2
+            return 1
+        fi
     fi
 
     echo "[Cerumbra] Installing nvidia-ccadm package..."
@@ -157,6 +169,68 @@ fix_conflicting_signed_by() {
     while IFS= read -r -d '' file; do
         sed -i -E "s#(Signed-By:\\s*)${replacement}(\\s+Signed-By:\\s*${replacement})+#\\1${replacement}#g" "${file}"
     done < <(find /etc/apt -type f -name "*.sources" -print0 2>/dev/null)
+}
+
+disable_duplicate_cuda_lists() {
+    local duplicates=(/etc/apt/sources.list.d/cuda-ubuntu*.list)
+    for file in "${duplicates[@]}"; do
+        if [[ -f "${file}" ]]; then
+            echo "[Cerumbra] Disabling duplicate legacy CUDA source ${file}"
+            mv "${file}" "${file}.disabled"
+        fi
+    done
+}
+
+add_confidential_computing_repo() {
+    local release=""
+    if command -v lsb_release >/dev/null 2>&1; then
+        release=$(lsb_release -rs)
+    elif [[ -f /etc/os-release ]]; then
+        release=$(grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+    fi
+
+    local distro=""
+    case "${release}" in
+        24.04*|24)
+            distro="ubuntu2404"
+            ;;
+        22.04*|22)
+            distro="ubuntu2204"
+            ;;
+        20.04*|20)
+            distro="ubuntu2004"
+            ;;
+        *)
+            echo "Error: Unsupported or undetected Ubuntu release (${release:-unknown}). Install the confidential computing repository manually." >&2
+            return 1
+            ;;
+    esac
+
+    local arch=""
+    if command -v dpkg >/dev/null 2>&1; then
+        arch=$(dpkg --print-architecture)
+    fi
+
+    local repo_arch="x86_64"
+    case "${arch}" in
+        amd64) repo_arch="x86_64" ;;
+        arm64) repo_arch="sbsa" ;;
+        *) repo_arch="x86_64" ;;
+    esac
+
+    local target="/etc/apt/sources.list.d/nvidia-confidential-compute.sources"
+    if [[ -f "${target}" ]]; then
+        return 0
+    fi
+
+    echo "[Cerumbra] Creating confidential-computing APT source at ${target}"
+    cat > "${target}" <<EOF
+Types: deb
+URIs: https://developer.download.nvidia.com/compute/confidential-computing/repos/${distro}/${repo_arch}/
+Suites: /
+Components:
+Signed-By: /usr/share/keyrings/cuda-archive-keyring.gpg
+EOF
 }
 
 echo "[Cerumbra] Checking confidential compute status..."
