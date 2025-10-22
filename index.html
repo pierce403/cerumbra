@@ -23,6 +23,36 @@
     </header>
 
     <main>
+        <!-- Hardware Requirement Warning -->
+        <section id="hardware-warning" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%); color: white; padding: 2rem 1rem; text-align: center; border-bottom: 4px solid #c92a2a;">
+            <div class="container" style="max-width: 900px; margin: 0 auto;">
+                <h2 style="color: white; margin-bottom: 1rem; font-size: 1.8rem;">⚠️ CRITICAL HARDWARE REQUIREMENT</h2>
+                <div style="background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <p style="font-size: 1.2rem; font-weight: bold; margin-bottom: 1rem;">
+                        DGX Spark with GB10 chip does NOT support confidential computing.
+                    </p>
+                    <p style="font-size: 1rem; margin-bottom: 1rem;">
+                        Cerumbra requires hardware with Trusted Execution Environment (TEE) support:
+                    </p>
+                    <ul style="list-style: none; padding: 0; margin: 1rem 0;">
+                        <li style="margin: 0.5rem 0;">✅ <strong>NVIDIA H100 GPUs</strong> (Hopper architecture)</li>
+                        <li style="margin: 0.5rem 0;">✅ <strong>Compatible CPU</strong> with AMD SEV-SNP or Intel TDX</li>
+                    </ul>
+                    <p style="font-size: 1.1rem; font-weight: bold; margin-top: 1rem; color: #fff;">
+                        Current Status: Waiting for compatible hardware to become available for production deployment.
+                    </p>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;">
+                        The DGX Spark GB10 system cannot provide hardware-backed confidential computing.
+                        <br>
+                        <a href="https://forums.developer.nvidia.com/t/confidential-computing-support-for-dgx-spark-gb10/347945" target="_blank" style="color: #ffd43b; text-decoration: underline;">NVIDIA Developer Forum Reference</a>
+                    </p>
+                </div>
+                <p style="font-size: 1rem; opacity: 0.9;">
+                    The current implementation runs in <strong>simulation mode</strong> for protocol development and testing.
+                </p>
+            </div>
+        </section>
+
         <section id="hero">
             <div class="hero-content">
                 <h1>End-to-End Encrypted Conversations with GPUs</h1>
@@ -34,23 +64,27 @@
         <section id="about">
             <div class="container">
                 <h2>What is Cerumbra?</h2>
-                <p>Cerumbra is a revolutionary protocol for end-to-end encrypted conversations with GPU-accelerated AI models running in Trusted Execution Environments (TEEs). It ensures that your prompts and the model's responses remain private and secure throughout the entire inference process.</p>
+                <p>Cerumbra is a protocol for end-to-end encrypted conversations with GPU-accelerated AI models running in Trusted Execution Environments (TEEs). It ensures that your prompts and the model's responses remain private and secure throughout the entire inference process.</p>
+                
+                <p style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 1rem; margin: 1.5rem 0; color: #856404;">
+                    <strong>⚠️ Hardware Development Note:</strong> This project is currently waiting for hardware that supports confidential computing. The NVIDIA DGX Spark with GB10 does not support the required Trusted Execution Environment features. Production deployment requires NVIDIA H100 GPUs with compatible TEE-enabled CPUs (AMD SEV-SNP or Intel TDX).
+                </p>
                 
                 <div class="features">
                     <div class="feature">
                         <div class="feature-icon">🔒</div>
                         <h3>End-to-End Encryption</h3>
-                        <p>Your data is encrypted from browser to GPU TEE, ensuring complete privacy</p>
+                        <p>Your data is encrypted from browser to GPU TEE, ensuring complete privacy (requires H100 hardware)</p>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">✓</div>
                         <h3>Remote Attestation</h3>
-                        <p>Cryptographically verify that your inference runs in a genuine TEE</p>
+                        <p>Cryptographically verify that your inference runs in a genuine TEE (requires H100 hardware)</p>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">⚡</div>
                         <h3>GPU Acceleration</h3>
-                        <p>Leverage NVIDIA Blackwell TEE for high-performance encrypted inference</p>
+                        <p>Leverage NVIDIA H100 TEE for high-performance encrypted inference</p>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">🌐</div>
@@ -230,8 +264,11 @@
 
         <section id="demo">
             <div class="container">
-                <h2>Interactive Demo</h2>
-                <p>Experience Cerumbra's end-to-end encryption in action. This demo simulates the complete flow from key exchange to encrypted inference.</p>
+                <h2>Interactive Demo (Simulation Mode)</h2>
+                <p style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 1rem; margin-bottom: 1.5rem; color: #0d47a1;">
+                    <strong>ℹ️ Simulation Mode:</strong> This demo runs in simulation mode since compatible hardware (H100 GPUs with TEE-enabled CPUs) is not yet available. It demonstrates the complete protocol flow from key exchange to encrypted inference, but does not use actual hardware TEE attestation.
+                </p>
+                <p>Experience Cerumbra's end-to-end encryption protocol in action. This demo simulates the complete flow from key exchange to encrypted inference.</p>
 
                 <div class="demo-container">
                     <div class="demo-status">

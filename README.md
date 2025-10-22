@@ -2,8 +2,23 @@
 
 **End-to-End Encrypted Conversations with GPUs**
 
-Cerumbra is a protocol and implementation for private, secure AI inference using browser-to-TEE (Trusted Execution Environment) encryption. It enables completely private conversations with GPU-accelerated AI models running in NVIDIA Blackwell TEEs, ensuring your prompts and responses remain encrypted throughout the entire inference process.
-The reference deployment targets NVIDIA DGX Spark systems and defaults to the `gpt-oss-20b` open model for shielded inference.
+> ## ⚠️ CRITICAL HARDWARE REQUIREMENT
+> 
+> **DGX Spark with GB10 chip does NOT support confidential computing.**
+> 
+> Cerumbra requires hardware with Trusted Execution Environment (TEE) support:
+> - ✅ **NVIDIA H100 GPUs** (Hopper architecture)
+> - ✅ **Compatible CPU** with AMD SEV-SNP or Intel TDX
+> 
+> **Current Status:** Waiting for compatible hardware to become available for production deployment. The DGX Spark GB10 system cannot provide hardware-backed confidential computing.
+> 
+> **Reference:** [NVIDIA Developer Forum - GB10 Confidential Computing Limitation](https://forums.developer.nvidia.com/t/confidential-computing-support-for-dgx-spark-gb10/347945)
+> 
+> The current implementation runs in **simulation mode** for protocol development and testing.
+
+---
+
+Cerumbra is a protocol and implementation for private, secure AI inference using browser-to-TEE (Trusted Execution Environment) encryption. It enables completely private conversations with GPU-accelerated AI models running in NVIDIA TEEs, ensuring your prompts and responses remain encrypted throughout the entire inference process.
 
 ## 🌟 Features
 
