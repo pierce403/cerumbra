@@ -121,7 +121,7 @@ EOF
         echo "Detected GPU '${GPU_INFO}'. Shielded inference requires a Blackwell GPU."
     fi
     if [ "$TEE_CONF_OK" != "true" ]; then
-        echo "Confidential computing mode is not enabled; run sudo nvidia-ccadm --mode SECURE and reboot."
+        echo "Confidential computing mode is not enabled; run sudo ./ccadm-setup.sh (as root) and reboot."
     fi
     echo ""
 fi

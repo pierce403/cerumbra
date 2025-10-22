@@ -90,6 +90,7 @@ For day-to-day use on a DGX Spark, the repo now includes launchers that wire up 
 
 - `./cerumbra-server.sh`  
   Creates (or reuses) a virtual environment at `.cerumbra-venv` (override with `CERUMBRA_VENV_DIR`), installs Python dependencies (bootstrapping with `CERUMBRA_PYTHON_BIN` if provided), runs the Cerumbra verification suite, and performs a NVIDIA Blackwell + confidential-compute preflight before starting `server.py`. If the host is missing a Blackwell GPU or confidential computing is disabled, the launcher drops into an explicit simulation mode and prints remediation steps. By default it binds to `0.0.0.0:8765`; override via `CERUMBRA_SERVER_HOST` and `CERUMBRA_SERVER_PORT` or `--host/--port`. The launcher exports `CERUMBRA_MODEL_ID`, which defaults to `gpt-oss-20b`; set this variable to swap in a different model id.
+  If confidential computing is still disabled, run `sudo ./ccadm-setup.sh` on the DGX Spark node to switch the GPU into SECURE mode and reboot.
 - `./cerumbra-client.sh`  
   Serves the static web client with `python -m http.server` (bind/port configurable through `CERUMBRA_CLIENT_BIND` and `CERUMBRA_CLIENT_PORT`, defaulting to `0.0.0.0:8080`). Set `CERUMBRA_SERVER_URL` or append `?server=ws://host:port` to the browser URL so the UI points at your DGX Spark backend.
 
