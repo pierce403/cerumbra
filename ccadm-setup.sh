@@ -136,24 +136,27 @@ add_nvidia_cuda_repo() {
 }
 
 fix_conflicting_signed_by() {
-    local repo_url="developer.download.nvidia.com/compute/cuda/repos"
-    local expected="Signed-By=/usr/share/keyrings/cuda-archive-keyring.gpg"
+    local legacy="/usr/share/keyrings/cuda_debian_prod.gpg"
+    local replacement="/usr/share/keyrings/cuda-archive-keyring.gpg"
 
-    local files
-    files=$(grep -Rl "${repo_url}" /etc/apt --include="*.list" 2>/dev/null || true)
-    if [[ -z "${files}" ]]; then
-        return 0
+    # Rewrite any legacy Signed-By/signed-by references across APT configs
+    if grep -Rql "${legacy}" /etc/apt 2>/dev/null; then
+        while IFS= read -r -d '' file; do
+            echo "[Cerumbra] Normalizing Signed-By in ${file}"
+            # Handle both '=' and ':' separators, case-insensitive
+            sed -i -E "s#([Ss]igned-[Bb]y[:=])\\s*${legacy}#\\1 ${replacement}#g" "${file}"
+        done < <(grep -RZl "${legacy}" /etc/apt 2>/dev/null)
     fi
 
-    while IFS= read -r file; do
-        [[ -z "${file}" ]] && continue
-        if grep -q "Signed-By=" "${file}"; then
-            if ! grep -q "${expected}" "${file}"; then
-                echo "[Cerumbra] Updating Signed-By directive in ${file}"
-                sed -i "s#Signed-By=[^[:space:]]*#${expected}#g" "${file}"
-            fi
-        fi
-    done <<< "${files}"
+    # Deduplicate repeated signed-by tokens that may have accumulated
+    while IFS= read -r -d '' file; do
+        sed -i -E "s#(signed-by=${replacement})([[:space:]]+signed-by=${replacement})+#\\1#gI" "${file}"
+        sed -i -E "s#(Signed-By=${replacement})([[:space:]]+Signed-By=${replacement})+#\\1#g" "${file}"
+    done < <(find /etc/apt -type f -name "*.list" -print0 2>/dev/null)
+
+    while IFS= read -r -d '' file; do
+        sed -i -E "s#(Signed-By:\\s*)${replacement}(\\s+Signed-By:\\s*${replacement})+#\\1${replacement}#g" "${file}"
+    done < <(find /etc/apt -type f -name "*.sources" -print0 2>/dev/null)
 }
 
 echo "[Cerumbra] Checking confidential compute status..."
