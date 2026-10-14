@@ -15,3 +15,10 @@
 - **Created test-nvidia-repos.sh**: Systematic verification script for repository availability
 - **Documentation**: CCADM-SETUP-FIXES.md updated with GB10 limitation details
 - **Impact**: Cerumbra will run in simulation mode on DGX Spark; real TEE support requires H100-based hardware
+
+## Static hosting, October 2026
+
+Native Cloudflare Git builds publish only the reviewed public assets via npm ci
+and npm run check:deploy. Deployment credentials remain in Cloudflare; previews
+are off. Local runtimes, wallets and publishing tools are not deployed. Original
+Pages/source history is retained for recovery.
